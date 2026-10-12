@@ -12,7 +12,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: { email: {}, password: {} },
       async authorize(raw) {
         const parsed = z
-          .object({ email: z.string().email(), password: z.string().min(1) })
+          .object({ email: z.string().trim().email(), password: z.string().min(1) })
           .safeParse(raw);
         if (!parsed.success) return null;
         const user = await db.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
