@@ -42,13 +42,15 @@ async function main() {
     await prisma.country.upsert({ where: { code }, update: { name }, create: { code, name } });
   }
 
-  const email = process.env.SEED_ADMIN_EMAIL?.toLowerCase();
-  const password = process.env.SEED_ADMIN_PASSWORD;
+  const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.SEED_ADMIN_PASSWORD?.trim();
   if (email && password) {
+    // La contraseña de la variable siempre se aplica: cambiarla y redesplegar resetea el acceso del admin.
+    const passwordHash = await bcrypt.hash(password, 10);
     await prisma.user.upsert({
       where: { email },
-      update: {},
-      create: { email, name: "Administrador", role: "ADMIN", passwordHash: await bcrypt.hash(password, 10) },
+      update: { passwordHash, role: "ADMIN" },
+      create: { email, name: "Administrador", role: "ADMIN", passwordHash },
     });
     console.log(`Usuario administrador listo: ${email}`);
   }
