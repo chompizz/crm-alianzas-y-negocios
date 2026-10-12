@@ -7,11 +7,14 @@ import { createOffering } from "./actions";
 
 export default async function CatalogPage({ searchParams }: { searchParams: Promise<{ tipo?: string }> }) {
   const { tipo } = await searchParams;
-  const offerings = await db.offering.findMany({
+  const [offerings, organizations, alliances] = await Promise.all([db.offering.findMany({
     where: tipo && tipo in OFFERING_KINDS ? { kind: tipo as OfferingKind } : {},
     orderBy: [{ kind: "asc" }, { name: "asc" }],
     include: { organizations: { select: { id: true, name: true } }, _count: { select: { alliances: true } } },
-  });
+  }),
+  db.organization.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  db.alliance.findMany({ select: { id: true, name: true, country: { select: { name: true } } }, orderBy: { name: "asc" } }),
+  ]);
 
   return (
     <>
@@ -59,8 +62,31 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
             </select>
           </label>
           <label className="block"><span className="label">Descripción</span><textarea name="description" rows={3} className="input" /></label>
+          <div>
+            <span className="label">Alianzas donde se usa</span>
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-300 p-2">
+              {alliances.map((a) => (
+                <label key={a.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="alliances" value={a.id} />
+                  {a.name} <span className="text-xs text-slate-400">({a.country.name})</span>
+                </label>
+              ))}
+              {alliances.length === 0 && <p className="text-sm text-slate-500">Sin alianzas.</p>}
+            </div>
+          </div>
+          <div>
+            <span className="label">Organizaciones que lo ofrecen</span>
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-300 p-2">
+              {organizations.map((o) => (
+                <label key={o.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="organizations" value={o.id} />
+                  {o.name}
+                </label>
+              ))}
+              {organizations.length === 0 && <p className="text-sm text-slate-500">Sin organizaciones.</p>}
+            </div>
+          </div>
           <button className="btn-primary w-full">Crear</button>
-          <p className="text-xs text-slate-500">Después podés asignarlo a organizaciones y alianzas.</p>
         </form>
       </div>
     </>

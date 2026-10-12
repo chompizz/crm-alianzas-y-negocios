@@ -7,6 +7,7 @@ import { stageDefaults } from "@/lib/alliance-stage";
 import { userForToken } from "@/lib/api-tokens";
 import { revenueByCountry } from "@/lib/country-revenue";
 import { dimensionSummary } from "@/lib/dimension-summary";
+import { importData, importSchema } from "@/lib/mcp/import";
 import { db } from "@/lib/db";
 import { parseDate, startOfTodayUtc } from "@/lib/format";
 import {
@@ -21,6 +22,7 @@ import {
   OFFERING_KINDS,
   ORGANIZATION_TYPES,
   PARTICIPANT_ROLES,
+  RELATIONSHIP_LEVELS,
   ROLES,
 } from "@/lib/labels";
 
@@ -49,6 +51,8 @@ function buildServer(user: User) {
         "(líder, socio, proveedor, cliente, canal, integrador, financiador, institucional u otro). El catálogo guarda productos, servicios y otros, " +
         "que se asignan a organizaciones (lo que ofrecen) y a alianzas (lo que se vende o entrega). Usá las herramientas de lectura antes de crear registros " +
         "para no duplicar, y confirmá con la persona antes de crear o modificar datos. Fechas en formato AAAA-MM-DD. " +
+        "Para cargar información que la persona pega o sube (texto, notas de reunión, planillas, PDF), extraé los datos y usá importar_datos: " +
+        "primero con simular=true para mostrarle qué se va a crear, y después de su confirmación con simular=false. " +
         "El trabajo se organiza en cuatro dimensiones: Gobernanza, Estrategia, Producto y Ventas; alianzas, iniciativas y oportunidades pertenecen a una.",
     },
   );
@@ -870,6 +874,107 @@ function buildServer(user: User) {
         return fail(organizacionId ? "No existe esa organización." : "No existe esa alianza.");
       }
       return json({ ok: true, accion: quitar ? "quitada" : "asignada" });
+    },
+  );
+
+  server.registerTool(
+    "importar_datos",
+    {
+      title: "Importar datos en bloque",
+      description:
+        "Carga de una vez organizaciones, contactos, catálogo, alianzas (con participantes y productos) y oportunidades a partir de lo que la persona " +
+        "pegó o subió al chat. Todo se referencia por nombre; lo que ya existe no se duplica (las organizaciones suman países y capacidades). " +
+        "Usá simular=true primero para mostrar el resultado sin guardar nada, y repetí con simular=false cuando la persona confirme.",
+      inputSchema: {
+        simular: z.boolean().describe("true: solo muestra qué pasaría, sin guardar"),
+        ...importSchema,
+      },
+    },
+    async ({ simular, ...data }) => {
+      const total = Object.values(data).reduce((n, list) => n + (list?.length ?? 0), 0);
+      if (!total) return fail("No hay nada para importar.");
+      if (total > 500) return fail("Máximo 500 registros por carga; dividila en partes.");
+      return json(await importData(data, simular));
+    },
+  );
+
+  server.registerTool(
+    "crear_contacto",
+    {
+      title: "Crear contacto",
+      description: "Agrega una persona de contacto a una organización.",
+      inputSchema: {
+        organizacionId: z.string(),
+        nombre: z.string(),
+        cargo: z.string().optional(),
+        email: z.string().email().optional(),
+        telefono: z.string().optional(),
+        pais: z.string().optional().describe("Código ISO o nombre"),
+        relacion: z.enum(keys(RELATIONSHIP_LEVELS)).optional().describe("FRIA, TIBIA o CERCANA"),
+        notas: z.string().optional(),
+      },
+    },
+    async ({ organizacionId, nombre, cargo, email, telefono, pais, relacion, notas }) => {
+      const org = await db.organization.findUnique({ where: { id: organizacionId }, select: { id: true } });
+      if (!org) return fail("No existe esa organización.");
+      const country = pais ? await resolveCountry(pais) : null;
+      if (pais && !country) return fail(`No encontré el país "${pais}".`);
+      const c = await db.contact.create({
+        data: {
+          organizationId: organizacionId,
+          name: nombre,
+          position: cargo,
+          email: email?.toLowerCase(),
+          phone: telefono,
+          notes: notas,
+          relationshipLevel: relacion ?? "TIBIA",
+          countryCode: country?.code,
+        },
+      });
+      return json({ creado: true, id: c.id, nombre: c.name });
+    },
+  );
+
+  server.registerTool(
+    "actualizar_organizacion",
+    {
+      title: "Actualizar organización",
+      description: "Cambia datos de una organización. Los países y capacidades que pases reemplazan a los actuales.",
+      inputSchema: {
+        id: z.string(),
+        nombre: z.string().optional(),
+        tipo: z.enum(keys(ORGANIZATION_TYPES)).optional(),
+        sector: z.string().optional(),
+        sitioWeb: z.string().optional(),
+        descripcion: z.string().optional(),
+        paises: z.array(z.string()).optional().describe("Códigos ISO o nombres"),
+        capacidades: z.array(z.string()).optional(),
+      },
+    },
+    async ({ id, nombre, tipo, sector, sitioWeb, descripcion, paises, capacidades }) => {
+      const org = await db.organization.findUnique({ where: { id }, select: { id: true } });
+      if (!org) return fail("No existe esa organización.");
+      let countries: { code: string }[] | undefined;
+      if (paises) {
+        const found = await Promise.all(paises.map(resolveCountry));
+        const missing = paises.filter((_, i) => !found[i]);
+        if (missing.length) return fail(`Países no reconocidos: ${missing.join(", ")}.`);
+        countries = found.map((c) => ({ code: c!.code }));
+      }
+      const o = await db.organization.update({
+        where: { id },
+        data: {
+          name: nombre,
+          type: tipo,
+          sector,
+          website: sitioWeb,
+          description: descripcion,
+          capabilities: capacidades,
+          ...(countries ? { countries: { set: countries } } : {}),
+        },
+        include: { countries: true },
+      });
+      return json({ actualizada: true, id: o.id, nombre: o.name, paises: o.countries.map((c) => c.name) });
     },
   );
 
