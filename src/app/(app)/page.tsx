@@ -1,8 +1,10 @@
 import Link from "next/link";
 import type { AllianceStage } from "@prisma/client";
+import { AllianceMap } from "@/components/alliance-map";
 import { PageHeader } from "@/components/page-header";
+import { revenueByCountry } from "@/lib/country-revenue";
 import { db } from "@/lib/db";
-import { fmtDate, fmtUsd, startOfTodayUtc } from "@/lib/format";
+import { fmtDate, fmtUsdCompact, startOfTodayUtc } from "@/lib/format";
 import { ALLIANCE_STAGES, HEALTH_DOT } from "@/lib/labels";
 
 const STALE_DAYS = 30;
@@ -33,6 +35,7 @@ export default async function DashboardPage() {
     select: { estimatedValue: true, probability: true },
   });
   const weightedPipeline = openOpportunities.reduce((s, o) => s + Number(o.estimatedValue ?? 0) * ((o.probability ?? 0) / 100), 0);
+  const countryRevenue = await revenueByCountry();
   const overdueTotal = await db.commitment.count({ where: { status: "PENDIENTE", dueDate: { lt: today } } });
   const multiCountry = orgCountryCounts.filter((o) => o._count.countries > 1).length;
 
@@ -58,11 +61,13 @@ export default async function DashboardPage() {
       <PageHeader title="Tablero" subtitle="Portafolio de alianzas" />
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Stat label="Alianzas abiertas" value={String(alliances.length)} hint={`${active} activas`} href="/alianzas" />
-        <Stat label="Valor esperado" value={fmtUsd(expected)} hint="alianzas abiertas" href="/alianzas" />
-        <Stat label="Oportunidades" value={fmtUsd(weightedPipeline)} hint={`${openOpportunities.length} abiertas, valor ponderado`} href="/oportunidades" />
+        <Stat label="Valor esperado" value={fmtUsdCompact(expected)} hint="alianzas abiertas" href="/alianzas" />
+        <Stat label="Oportunidades" value={fmtUsdCompact(weightedPipeline)} hint={`${openOpportunities.length} abiertas, valor ponderado`} href="/oportunidades" />
         <Stat label="Compromisos vencidos" value={String(overdueTotal)} hint="pendientes con fecha pasada" href="/compromisos?vista=vencidos" alert={overdueTotal > 0} />
         <Stat label="Organizaciones" value={String(organizations)} hint={`${multiCountry} multipaís`} href="/organizaciones" />
       </div>
+
+      <AllianceMap data={countryRevenue} />
 
       <section className="card mb-6 overflow-x-auto">
         <h2 className="mb-3 font-semibold">Alianzas por país y etapa</h2>
@@ -126,9 +131,9 @@ export default async function DashboardPage() {
 
 function Stat({ label, value, hint, href, alert }: { label: string; value: string; hint: string; href: string; alert?: boolean }) {
   return (
-    <Link href={href} className="card block hover:border-indigo-200">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className={`mt-1 text-3xl font-semibold ${alert ? "text-red-600" : ""}`}>{value}</p>
+    <Link href={href} className="card block transition hover:border-indigo-300 hover:shadow-[0_0_24px_-6px_rgb(34_211_238/0.5)]">
+      <p className="text-xs uppercase tracking-wider text-slate-500">{label}</p>
+      <p className={`mt-1 font-mono text-3xl font-semibold tracking-tight ${alert ? "text-red-600" : "text-slate-900"}`}>{value}</p>
       <p className="text-xs text-slate-400">{hint}</p>
     </Link>
   );

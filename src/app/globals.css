@@ -1,39 +1,123 @@
 @import "tailwindcss";
 
+/*
+  Tema "Nexo futurista": oscuro con acentos neón.
+  Se remapean las paletas que usa toda la app (slate, indigo, red, amber, emerald, white)
+  para que cada pantalla herede el tema sin reescribir sus clases.
+*/
+@theme {
+  --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-nexo), ui-monospace, monospace;
+
+  --color-white: #0c1324;
+
+  --color-slate-50: #070b17;
+  --color-slate-100: #121b30;
+  --color-slate-200: #1b2742;
+  --color-slate-300: #283656;
+  --color-slate-400: #5d6d90;
+  --color-slate-500: #8494b5;
+  --color-slate-600: #a5b2cd;
+  --color-slate-700: #c5cee2;
+  --color-slate-800: #dfe5f1;
+  --color-slate-900: #f1f5fd;
+
+  --color-indigo-50: #06283a;
+  --color-indigo-100: #0a3449;
+  --color-indigo-200: #0f4a63;
+  --color-indigo-300: #136a87;
+  --color-indigo-500: #22d3ee;
+  --color-indigo-600: #06b6d4;
+  --color-indigo-700: #67e8f9;
+
+  --color-red-50: #2a0d17;
+  --color-red-200: #5e1b2c;
+  --color-red-500: #f43f5e;
+  --color-red-600: #fb7185;
+  --color-red-700: #fda4af;
+
+  --color-amber-50: #2a1e07;
+  --color-amber-200: #5c420d;
+  --color-amber-400: #fbbf24;
+  --color-amber-700: #fcd34d;
+  --color-amber-900: #fde68a;
+
+  --color-emerald-50: #05261d;
+  --color-emerald-500: #10b981;
+  --color-emerald-700: #6ee7b7;
+
+  --color-neon-cyan: #22d3ee;
+  --color-neon-violet: #a78bfa;
+}
+
+html {
+  color-scheme: dark;
+}
+
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  @apply min-h-screen text-slate-900 antialiased;
+  font-family: var(--font-sans);
+  background-color: #050812;
+  background-image:
+    radial-gradient(60rem 40rem at 85% -10%, rgb(124 58 237 / 0.18), transparent 60%),
+    radial-gradient(50rem 35rem at -10% 110%, rgb(34 211 238 / 0.14), transparent 60%),
+    linear-gradient(rgb(148 163 184 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 184 / 0.05) 1px, transparent 1px);
+  background-size: auto, auto, 44px 44px, 44px 44px;
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgb(34 211 238 / 0.35);
 }
 
 @layer components {
   .input {
-    @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100;
+    @apply w-full rounded-lg border border-slate-300 bg-slate-50/70 px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700;
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-[#03121a] transition;
+    background-image: linear-gradient(90deg, var(--color-neon-cyan), var(--color-neon-violet));
+    box-shadow: 0 0 0 1px rgb(34 211 238 / 0.3), 0 0 22px -4px rgb(34 211 238 / 0.55);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 0 1px rgb(34 211 238 / 0.5), 0 0 30px -2px rgb(167 139 250 / 0.6);
+    filter: brightness(1.08);
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50;
+    @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white/60 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:text-slate-900;
   }
   .btn-danger {
-    @apply inline-flex items-center justify-center rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50;
+    @apply inline-flex items-center justify-center rounded-lg border border-red-200 bg-white/60 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50;
   }
   .card {
-    @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm;
+    @apply rounded-2xl border border-slate-200/80 p-5;
+    background: linear-gradient(180deg, rgb(18 27 48 / 0.78), rgb(10 16 30 / 0.78));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 10px 30px -12px rgb(0 0 0 / 0.6);
+    backdrop-filter: blur(10px);
   }
   .label {
-    @apply mb-1 block text-sm font-medium text-slate-700;
+    @apply mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500;
   }
   .table {
     @apply w-full text-left text-sm;
   }
   .table th {
-    @apply border-b border-slate-200 px-3 py-2 font-medium text-slate-500;
+    @apply border-b border-slate-200 px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-500;
   }
   .table td {
     @apply border-b border-slate-100 px-3 py-2;
   }
+  .table tbody tr {
+    @apply transition-colors hover:bg-indigo-50/40;
+  }
   .chip {
-    @apply inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700;
+    @apply inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700;
+  }
+  .neon-text {
+    background-image: linear-gradient(90deg, var(--color-neon-cyan), var(--color-neon-violet));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 }

@@ -24,11 +24,11 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <form action={login} className="w-full max-w-sm space-y-4 rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <form action={login} className="card w-full max-w-sm space-y-4 p-8">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Nexo</h1>
-          <p className="text-sm text-slate-500">Gestión de alianzas y negocios</p>
+          <h1 className="neon-text text-3xl font-bold tracking-[0.2em]">NEXO</h1>
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.25em] text-slate-500">Alianzas · Estrategia · Negocios</p>
         </div>
         {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">Email o contraseña incorrectos.</p>}
         <label className="block">
