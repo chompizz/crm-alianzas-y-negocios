@@ -4,7 +4,7 @@ CRM interno para gestionar alianzas, estrategia y negocios: organizaciones del e
 
 ## Estado
 
-Etapa 1 (base): login, usuarios, organizaciones multipaís, contactos y tablero inicial. El modelo de datos completo (alianzas, oportunidades, iniciativas, interacciones, compromisos) ya está en `prisma/schema.prisma`; sus pantallas llegan en las etapas siguientes.
+MVP completo: organizaciones multipaís y contactos, alianzas por país (tablero por etapas, participantes, interacciones y compromisos), oportunidades, iniciativas con hitos y un tablero de portafolio. Siguiente paso: piloto con datos reales.
 
 ## Requisitos
 

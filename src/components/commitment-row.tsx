@@ -5,7 +5,11 @@ import { fmtDate, startOfTodayUtc } from "@/lib/format";
 import { COMMITMENT_PARTIES, COMMITMENT_STATUSES } from "@/lib/labels";
 
 type Props = {
-  commitment: Commitment & { owner: { name: string } | null; alliance?: { id: string; name: string } | null };
+  commitment: Commitment & {
+    owner: { name: string } | null;
+    alliance?: { id: string; name: string } | null;
+    initiative?: { id: string; name: string } | null;
+  };
   showAlliance?: boolean;
 };
 
@@ -15,7 +19,10 @@ export function CommitmentRow({ commitment: c, showAlliance }: Props) {
     <tr>
       <td className={c.status !== "PENDIENTE" ? "text-slate-400 line-through" : ""}>{c.description}</td>
       {showAlliance && (
-        <td>{c.alliance && <Link href={`/alianzas/${c.alliance.id}`} className="hover:underline">{c.alliance.name}</Link>}</td>
+        <td>
+          {c.alliance && <Link href={`/alianzas/${c.alliance.id}`} className="hover:underline">{c.alliance.name}</Link>}
+          {c.initiative && <Link href={`/iniciativas/${c.initiative.id}`} className="hover:underline">{c.initiative.name}</Link>}
+        </td>
       )}
       <td>{c.party === "SOCIO" ? COMMITMENT_PARTIES.SOCIO : c.owner?.name ?? COMMITMENT_PARTIES.NOSOTROS}</td>
       <td className={overdue ? "font-medium text-red-600" : ""}>
