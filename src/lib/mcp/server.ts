@@ -4,6 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import type { User } from "@prisma/client";
 import { z } from "zod";
 import { userForToken } from "@/lib/api-tokens";
+import { revenueByCountry } from "@/lib/country-revenue";
 import { db } from "@/lib/db";
 import { parseDate, startOfTodayUtc } from "@/lib/format";
 import {
@@ -76,6 +77,27 @@ function buildServer(user: User) {
         valorPonderadoOportunidadesUSD: opportunities.reduce((s, o) => s + Number(o.estimatedValue ?? 0) * ((o.probability ?? 0) / 100), 0),
       });
     },
+  );
+
+  server.registerTool(
+    "facturacion_por_pais",
+    {
+      title: "Facturación potencial por país",
+      description:
+        "Lo mismo que muestra el mapa del tablero: por cada país con alianzas abiertas, cantidad de alianzas, " +
+        "facturación potencial (suma del valor esperado) y oportunidades abiertas ponderadas por probabilidad. Ordenado de mayor a menor.",
+      annotations: { readOnlyHint: true },
+    },
+    async () =>
+      json(
+        (await revenueByCountry()).map((r) => ({
+          codigo: r.code,
+          pais: r.name,
+          alianzasAbiertas: r.alliances,
+          facturacionPotencialUSD: r.potential,
+          oportunidadesPonderadasUSD: Math.round(r.weightedOpportunities),
+        })),
+      ),
   );
 
   server.registerTool(

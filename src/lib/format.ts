@@ -22,3 +22,10 @@ export function startOfTodayUtc() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
+
+const usdCompactFmt = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+
+// $250K, $1.2M: para etiquetas cortas (mapa).
+export function fmtUsdCompact(v: number) {
+  return `$${usdCompactFmt.format(v)}`;
+}
