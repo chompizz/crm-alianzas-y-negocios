@@ -18,7 +18,13 @@ function readOffering(fd: FormData) {
 
 export async function createOffering(fd: FormData) {
   await requireUser();
-  const o = await db.offering.create({ data: readOffering(fd) });
+  const o = await db.offering.create({
+    data: {
+      ...readOffering(fd),
+      organizations: { connect: all(fd, "organizations").map((id) => ({ id })) },
+      alliances: { connect: all(fd, "alliances").map((id) => ({ id })) },
+    },
+  });
   revalidatePath("/catalogo");
   redirect(`/catalogo/${o.id}`);
 }
