@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { AllianceType, Dimension, Prisma } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
-import { fmtUsd } from "@/lib/format";
+import { dateInput, fmtUsd } from "@/lib/format";
 import { ALLIANCE_TYPES, DIMENSIONS } from "@/lib/labels";
 import { KanbanBoard } from "./kanban-board";
 
@@ -73,7 +73,12 @@ export default async function AlliancesPage({
           owner: a.owner?.name ?? "Sin responsable",
           value: fmtUsd(a.expectedValue),
           pendingCommitments: a._count.commitments,
+          ownerId: a.ownerId ?? "",
+          expectedValue: a.expectedValue?.toString() ?? "",
+          startDate: dateInput(a.startDate),
+          renewalDate: dateInput(a.renewalDate),
         }))}
+        users={users}
       />
     </>
   );

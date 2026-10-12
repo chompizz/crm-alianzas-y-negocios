@@ -136,3 +136,14 @@ body {
     color: transparent;
   }
 }
+
+/* Países con alianzas en el mapa: resaltan al pasar el mouse. */
+.map-country {
+  cursor: pointer;
+  transition: fill-opacity 0.15s, stroke-width 0.15s;
+}
+.map-country:hover {
+  stroke: #e0fbff;
+  stroke-width: 1.6;
+  fill: rgb(34 211 238 / 0.95);
+}

@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useOptimistic, useState, useTransition } from "react";
 import type { AllianceStage, Dimension, Health } from "@prisma/client";
 import { DimensionBadge } from "@/components/dimension-badge";
-import { ALLIANCE_STAGES, HEALTH_DOT } from "@/lib/labels";
-import { setAllianceStage } from "./actions";
+import { ALLIANCE_STAGES, HEALTH, HEALTH_DOT } from "@/lib/labels";
+import { quickUpdateAlliance, setAllianceStage } from "./actions";
 
 export type KanbanCard = {
   id: string;
@@ -18,9 +18,18 @@ export type KanbanCard = {
   owner: string;
   value: string;
   pendingCommitments: number;
+  // Valores crudos para la edición rápida.
+  ownerId: string;
+  expectedValue: string;
+  startDate: string;
+  renewalDate: string;
 };
 
-export function KanbanBoard({ cards }: { cards: KanbanCard[] }) {
+type User = { id: string; name: string };
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+export function KanbanBoard({ cards, users }: { cards: KanbanCard[]; users: User[] }) {
   const [optimistic, moveCard] = useOptimistic(cards, (state, move: { id: string; stage: AllianceStage }) =>
     state.map((c) => (c.id === move.id ? { ...c, stage: move.stage } : c)),
   );
@@ -28,6 +37,7 @@ export function KanbanBoard({ cards }: { cards: KanbanCard[] }) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<AllianceStage | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<KanbanCard | null>(null);
 
   function drop(stage: AllianceStage) {
     const id = dragging;
@@ -36,10 +46,13 @@ export function KanbanBoard({ cards }: { cards: KanbanCard[] }) {
     const card = optimistic.find((c) => c.id === id);
     if (!id || !card || card.stage === stage) return;
     setError(null);
+    // Al activarse toma hoy como inicio si no tenía (igual que en el servidor).
+    const moved = { ...card, stage, startDate: stage === "ACTIVA" && !card.startDate ? today() : card.startDate };
     startTransition(async () => {
       moveCard({ id, stage });
       try {
         await setAllianceStage(id, stage);
+        setEditing(moved);
       } catch {
         setError(`No se pudo mover "${card.name}". Probá de nuevo.`);
       }
@@ -49,7 +62,10 @@ export function KanbanBoard({ cards }: { cards: KanbanCard[] }) {
   return (
     <>
       {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      <p className="mb-2 text-xs text-slate-500">Arrastrá una tarjeta a otra columna para cambiar su etapa.</p>
+      <p className="mb-2 text-xs text-slate-500">
+        Arrastrá una tarjeta a otra columna para cambiar su etapa; después podés ajustar sus datos.
+      </p>
+      {editing && <QuickEdit card={editing} users={users} onClose={() => setEditing(null)} />}
       <div className="flex gap-3 overflow-x-auto pb-4">
         {(Object.keys(ALLIANCE_STAGES) as AllianceStage[]).map((stage) => {
           const items = optimistic.filter((c) => c.stage === stage);
@@ -119,5 +135,68 @@ export function KanbanBoard({ cards }: { cards: KanbanCard[] }) {
         })}
       </div>
     </>
+  );
+}
+
+function QuickEdit({ card, users, onClose }: { card: KanbanCard; users: User[]; onClose: () => void }) {
+  const [saving, setSaving] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <form
+        role="dialog"
+        aria-label={`Actualizar ${card.name}`}
+        onClick={(e) => e.stopPropagation()}
+        action={async (fd) => {
+          setSaving(true);
+          try {
+            await quickUpdateAlliance(card.id, fd);
+            onClose();
+          } finally {
+            setSaving(false);
+          }
+        }}
+        className="card w-full max-w-md space-y-3"
+      >
+        <div>
+          <p className="font-mono text-xs uppercase tracking-widest text-indigo-600">Movida a {ALLIANCE_STAGES[card.stage]}</p>
+          <h2 className="mt-1 text-lg font-semibold">{card.name}</h2>
+          <p className="text-xs text-slate-500">Revisá los datos para esta etapa.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label>
+            <span className="label">Salud</span>
+            <select name="health" defaultValue={card.health} className="input">
+              {Object.entries(HEALTH).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          <label>
+            <span className="label">Responsable</span>
+            <select name="ownerId" defaultValue={card.ownerId} className="input">
+              <option value="">Sin asignar</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </label>
+          <label className="sm:col-span-2">
+            <span className="label">Valor esperado (USD)</span>
+            <input name="expectedValue" inputMode="decimal" defaultValue={card.expectedValue} placeholder="0" className="input" />
+          </label>
+          <label>
+            <span className="label">Inicio</span>
+            <input name="startDate" type="date" defaultValue={card.startDate} className="input" />
+          </label>
+          <label>
+            <span className="label">Renovación</span>
+            <input name="renewalDate" type="date" defaultValue={card.renewalDate} className="input" />
+          </label>
+        </div>
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <Link href={`/alianzas/${card.id}`} className="text-sm text-indigo-700 hover:underline">Abrir ficha completa</Link>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary">Omitir</button>
+            <button disabled={saving} className="btn-primary">{saving ? "Guardando…" : "Guardar"}</button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
