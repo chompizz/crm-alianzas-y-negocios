@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { User } from "@prisma/client";
 import { z } from "zod";
+import { stageDefaults } from "@/lib/alliance-stage";
 import { userForToken } from "@/lib/api-tokens";
 import { revenueByCountry } from "@/lib/country-revenue";
 import { dimensionSummary } from "@/lib/dimension-summary";
@@ -435,7 +436,9 @@ function buildServer(user: User) {
     "actualizar_alianza",
     {
       title: "Actualizar alianza",
-      description: "Cambia la etapa, la salud, la dimensión, el valor esperado o los objetivos de una alianza.",
+      description:
+        "Cambia la etapa, la salud, la dimensión, el valor esperado, el responsable, las fechas o los objetivos de una alianza. " +
+        "Al pasar a ACTIVA, si no tenía fecha de inicio toma la de hoy.",
       inputSchema: {
         id: z.string(),
         etapa: z.enum(keys(ALLIANCE_STAGES)).optional(),
@@ -443,14 +446,33 @@ function buildServer(user: User) {
         dimension: dimension().optional(),
         valorEsperadoUSD: z.number().nonnegative().optional(),
         objetivos: z.string().optional(),
+        responsableId: z.string().nullable().optional().describe("Id de usuario (listar_usuarios); null para quitarlo"),
+        inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("AAAA-MM-DD; null para borrarla"),
+        renovacion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("AAAA-MM-DD; null para borrarla"),
       },
     },
-    async ({ id, etapa, salud, dimension, valorEsperadoUSD, objetivos }) => {
-      const exists = await db.alliance.findUnique({ where: { id }, select: { id: true } });
-      if (!exists) return fail("No existe esa alianza.");
+    async ({ id, etapa, salud, dimension, valorEsperadoUSD, objetivos, responsableId, inicio, renovacion }) => {
+      const current = await db.alliance.findUnique({ where: { id }, select: { startDate: true } });
+      if (!current) return fail("No existe esa alianza.");
+      if (responsableId && !(await db.user.findUnique({ where: { id: responsableId }, select: { id: true } }))) {
+        return fail("No existe ese usuario.");
+      }
+      const date = (v: string | null | undefined) => (v === undefined ? undefined : parseDate(v));
+      const startDate = date(inicio);
       const a = await db.alliance.update({
         where: { id },
-        data: { stage: etapa, health: salud, dimension, expectedValue: valorEsperadoUSD, objectives: objetivos },
+        data: {
+          ...(etapa ? stageDefaults(etapa, { startDate: startDate === undefined ? current.startDate : startDate }) : {}),
+          stage: etapa,
+          health: salud,
+          dimension,
+          expectedValue: valorEsperadoUSD,
+          objectives: objetivos,
+          ownerId: responsableId,
+          ...(startDate !== undefined ? { startDate } : {}),
+          renewalDate: date(renovacion),
+        },
+        include: { owner: { select: { name: true } } },
       });
       return json({
         actualizada: true,
@@ -459,6 +481,9 @@ function buildServer(user: User) {
         salud: HEALTH[a.health],
         dimension: DIMENSIONS[a.dimension],
         valorEsperadoUSD: a.expectedValue ? Number(a.expectedValue) : null,
+        responsable: a.owner?.name ?? null,
+        inicio: day(a.startDate),
+        renovacion: day(a.renewalDate),
       });
     },
   );

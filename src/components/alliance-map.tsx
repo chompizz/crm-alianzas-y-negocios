@@ -6,6 +6,7 @@ import type { GeometryCollection, Topology } from "topojson-specification";
 import world from "world-atlas/countries-110m.json";
 import type { CountryRevenue } from "@/lib/country-revenue";
 import { fmtUsdCompact } from "@/lib/format";
+import { MapHover } from "./map-hover";
 
 // ISO 3166 alfa-2 (como guarda Nexo) → numérico (como identifica world-atlas), y un punto donde anclar la etiqueta.
 const COUNTRIES: Record<string, { id: string; at: [number, number] }> = {
@@ -53,9 +54,18 @@ const shapes = land.map((f: Feature<Geometry>) => ({ id: String(f.id), d: path(f
 
 const LABEL_H = 20;
 
+// Datos que muestra el tooltip al pasar el mouse por un país.
+const hoverData = (r: CountryRevenue) => ({
+  "data-code": r.code,
+  "data-name": r.name,
+  "data-alliances": `${r.alliances} ${r.alliances === 1 ? "alianza abierta" : "alianzas abiertas"}`,
+  "data-potential": fmtUsdCompact(r.potential),
+  "data-weighted": fmtUsdCompact(r.weightedOpportunities),
+});
+
 // Ubica cada etiqueta a la derecha de su país y, si choca con otra ya ubicada, la corre hacia arriba o abajo.
 function placeLabels(data: CountryRevenue[]) {
-  const placed: { code: string; text: string; px: number; py: number; x: number; y: number; w: number }[] = [];
+  const placed: { row: CountryRevenue; code: string; text: string; px: number; py: number; x: number; y: number; w: number }[] = [];
   const overlaps = (x: number, y: number, w: number) =>
     placed.some((o) => x < o.x + o.w + 4 && x + w + 4 > o.x && y < o.y + LABEL_H + 3 && y + LABEL_H + 3 > o.y);
   for (const r of data) {
@@ -72,7 +82,7 @@ function placeLabels(data: CountryRevenue[]) {
         break;
       }
     }
-    placed.push({ code: r.code, text, px: pt[0], py: pt[1], x, y, w });
+    placed.push({ row: r, code: r.code, text, px: pt[0], py: pt[1], x, y, w });
   }
   return placed;
 }
@@ -97,6 +107,7 @@ export function AllianceMap({ data }: { data: CountryRevenue[] }) {
         </div>
       </div>
       <div className="grid lg:grid-cols-[1fr_17rem]">
+        <MapHover>
         <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Mapa de alianzas por país">
           <defs>
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
@@ -115,15 +126,15 @@ export function AllianceMap({ data }: { data: CountryRevenue[] }) {
                   stroke={r ? "#67e8f9" : "#1f2b48"}
                   strokeWidth={r ? 0.9 : 0.5}
                   filter={r ? "url(#glow)" : undefined}
-                >
-                  {r && <title>{`${r.name}: ${r.alliances} alianza(s), ${fmtUsdCompact(r.potential)}`}</title>}
-                </path>
+                  className={r ? "map-country" : undefined}
+                  {...(r ? hoverData(r) : {})}
+                />
               );
             })}
           </g>
           <g fontFamily="var(--font-mono)">
             {placeLabels(data).map((l) => (
-              <g key={l.code}>
+              <g key={l.code} className="cursor-pointer" {...hoverData(l.row)}>
                 <line x1={l.px} y1={l.py} x2={l.x} y2={l.y + 10} stroke="#a78bfa" strokeOpacity="0.8" strokeWidth="1" />
                 <circle cx={l.px} cy={l.py} r="3.5" fill="#a78bfa" filter="url(#glow)" />
                 <g transform={`translate(${l.x},${l.y})`}>
@@ -135,6 +146,7 @@ export function AllianceMap({ data }: { data: CountryRevenue[] }) {
             ))}
           </g>
         </svg>
+        </MapHover>
         <ol className="max-h-[470px] overflow-y-auto border-t border-slate-200 px-5 py-3 text-sm lg:border-l lg:border-t-0">
           {data.map((r, i) => (
             <li key={r.code} className="flex items-center justify-between gap-2 border-b border-slate-100 py-2 last:border-0">

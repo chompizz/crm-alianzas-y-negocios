@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
 import { all, oneOf, str } from "@/lib/forms";
+import { stageDefaults } from "@/lib/alliance-stage";
 import { parseDate } from "@/lib/format";
 import {
   ALLIANCE_STAGES,
@@ -156,7 +157,29 @@ export async function setCommitmentStatus(id: string, fd: FormData) {
 export async function setAllianceStage(id: string, stage: string) {
   await requireUser();
   if (!(stage in ALLIANCE_STAGES)) throw new Error("Etapa inválida");
-  await db.alliance.update({ where: { id }, data: { stage: stage as keyof typeof ALLIANCE_STAGES } });
+  const next = stage as keyof typeof ALLIANCE_STAGES;
+  const current = await db.alliance.findUnique({ where: { id }, select: { startDate: true } });
+  if (!current) throw new Error("No existe esa alianza");
+  await db.alliance.update({ where: { id }, data: { stage: next, ...stageDefaults(next, current) } });
+  revalidatePath("/alianzas");
+  revalidatePath(`/alianzas/${id}`);
+  revalidatePath("/");
+}
+
+// Edición rápida desde el tablero, después de soltar una tarjeta en otra etapa.
+export async function quickUpdateAlliance(id: string, fd: FormData) {
+  await requireUser();
+  const value = str(fd, "expectedValue");
+  await db.alliance.update({
+    where: { id },
+    data: {
+      health: oneOf(fd, "health", HEALTH, "VERDE"),
+      ownerId: str(fd, "ownerId"),
+      expectedValue: value ? value.replace(/[^\d.]/g, "") || null : null,
+      startDate: parseDate(str(fd, "startDate")),
+      renewalDate: parseDate(str(fd, "renewalDate")),
+    },
+  });
   revalidatePath("/alianzas");
   revalidatePath(`/alianzas/${id}`);
   revalidatePath("/");
