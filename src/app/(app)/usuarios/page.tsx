@@ -1,46 +1,34 @@
-import bcrypt from "bcryptjs";
-import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
-import { oneOf, str } from "@/lib/forms";
 import { ROLES } from "@/lib/labels";
+import { createUser, deleteUser } from "./actions";
+import { ConfirmButton } from "./confirm-button";
 
-async function requireAdmin() {
+const MESSAGES: Record<string, string> = {
+  creado: "Usuario creado.",
+  actualizado: "Usuario actualizado.",
+  eliminado: "Usuario eliminado.",
+};
+const ERRORS: Record<string, string> = {
+  datos: "Completá nombre, email y una contraseña de al menos 8 caracteres.",
+  email: "Ya existe un usuario con ese email.",
+};
+
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
   const session = await auth();
   if (session?.user?.role !== "ADMIN") redirect("/");
-  return session.user;
-}
-
-async function createUser(fd: FormData) {
-  "use server";
-  await requireAdmin();
-  const name = str(fd, "name");
-  const email = str(fd, "email")?.toLowerCase();
-  const password = str(fd, "password");
-  if (!name || !email || !password || password.length < 8) throw new Error("Datos incompletos (la contraseña debe tener al menos 8 caracteres)");
-  await db.user.create({
-    data: { name, email, role: oneOf(fd, "role", ROLES, "MEMBER"), passwordHash: await bcrypt.hash(password, 10) },
-  });
-  revalidatePath("/usuarios");
-}
-
-async function deleteUser(id: string) {
-  "use server";
-  const me = await requireAdmin();
-  if (me.id === id) throw new Error("No podés eliminar tu propio usuario");
-  await db.user.delete({ where: { id } });
-  revalidatePath("/usuarios");
-}
-
-export default async function UsersPage() {
-  const me = await requireAdmin();
+  const me = session.user;
+  const { ok, error } = await searchParams;
   const users = await db.user.findMany({ orderBy: { name: "asc" } });
 
   return (
     <>
       <PageHeader title="Usuarios" subtitle="Personas del equipo con acceso a Nexo" />
+      {ok && MESSAGES[ok] && <p className="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{MESSAGES[ok]}</p>}
+      {error && ERRORS[error] && <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{ERRORS[error]}</p>}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="card overflow-x-auto p-0 lg:col-span-2">
           <table className="table">
@@ -48,13 +36,14 @@ export default async function UsersPage() {
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td className="font-medium">{u.name}</td>
+                  <td className="font-medium">{u.name}{u.id === me.id && <span className="ml-1 text-xs text-slate-500">(vos)</span>}</td>
                   <td>{u.email}</td>
                   <td>{ROLES[u.role]}</td>
-                  <td className="text-right">
+                  <td className="whitespace-nowrap text-right">
+                    <Link href={`/usuarios/${u.id}/editar`} className="text-xs text-indigo-600 hover:underline">Editar</Link>
                     {u.id !== me.id && (
-                      <form action={deleteUser.bind(null, u.id)}>
-                        <button className="text-xs text-red-600 hover:underline">Eliminar</button>
+                      <form action={deleteUser.bind(null, u.id)} className="ml-3 inline">
+                        <ConfirmButton message={`¿Eliminar a ${u.name}? Sus alianzas y compromisos quedarán sin responsable.`} />
                       </form>
                     )}
                   </td>
