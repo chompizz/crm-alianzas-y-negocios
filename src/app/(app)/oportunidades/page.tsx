@@ -1,19 +1,21 @@
 import Link from "next/link";
-import type { OpportunityStatus, Prisma } from "@prisma/client";
+import type { Dimension, OpportunityStatus, Prisma } from "@prisma/client";
+import { DimensionBadge } from "@/components/dimension-badge";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
 import { fmtUsd } from "@/lib/format";
-import { OPPORTUNITY_STATUSES } from "@/lib/labels";
+import { DIMENSIONS, OPPORTUNITY_STATUSES } from "@/lib/labels";
 
 export default async function OpportunitiesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string; pais?: string }>;
+  searchParams: Promise<{ estado?: string; pais?: string; dim?: string }>;
 }) {
-  const { estado = "ABIERTA", pais } = await searchParams;
+  const { estado = "ABIERTA", pais, dim } = await searchParams;
   const where: Prisma.OpportunityWhereInput = {};
   if (estado in OPPORTUNITY_STATUSES) where.status = estado as OpportunityStatus;
   if (pais) where.alliance = { countryCode: pais };
+  if (dim && dim in DIMENSIONS) where.dimension = dim as Dimension;
 
   const [opportunities, countries] = await Promise.all([
     db.opportunity.findMany({
@@ -42,6 +44,10 @@ export default async function OpportunitiesPage({
           <option value="">Todos los países</option>
           {countries.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
         </select>
+        <select name="dim" defaultValue={dim ?? ""} className="input max-w-[12rem]">
+          <option value="">Todas las dimensiones</option>
+          {Object.entries(DIMENSIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
         <button className="btn-secondary">Filtrar</button>
       </form>
       <div className="mb-4 grid gap-4 sm:grid-cols-2">
@@ -50,11 +56,12 @@ export default async function OpportunitiesPage({
       </div>
       <div className="card overflow-x-auto p-0">
         <table className="table">
-          <thead><tr><th>Oportunidad</th><th>Alianza</th><th>País</th><th className="text-right">Valor</th><th className="text-right">Prob.</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Oportunidad</th><th>Dimensión</th><th>Alianza</th><th>País</th><th className="text-right">Valor</th><th className="text-right">Prob.</th><th>Estado</th></tr></thead>
           <tbody>
             {opportunities.map((o) => (
               <tr key={o.id} className="hover:bg-slate-50">
                 <td><Link href={`/oportunidades/${o.id}/editar`} className="font-medium text-indigo-700 hover:underline">{o.title}</Link></td>
+                <td><DimensionBadge dimension={o.dimension} /></td>
                 <td><Link href={`/alianzas/${o.alliance.id}`} className="hover:underline">{o.alliance.name}</Link></td>
                 <td>{o.alliance.country.name}</td>
                 <td className="text-right">{fmtUsd(o.estimatedValue)}</td>
@@ -62,7 +69,7 @@ export default async function OpportunitiesPage({
                 <td>{OPPORTUNITY_STATUSES[o.status]}</td>
               </tr>
             ))}
-            {opportunities.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-slate-500">No hay oportunidades con estos filtros.</td></tr>}
+            {opportunities.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-slate-500">No hay oportunidades con estos filtros.</td></tr>}
           </tbody>
         </table>
       </div>

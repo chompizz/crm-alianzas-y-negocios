@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Initiative, User } from "@prisma/client";
+import { DimensionSelect } from "@/components/dimension-select";
 
 type Props = {
   action: (fd: FormData) => Promise<void>;
@@ -27,6 +28,7 @@ export function InitiativeForm({ action, users, alliances, organizations, initia
             {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </label>
+        <DimensionSelect defaultValue={initiative?.dimension ?? "ESTRATEGIA"} />
       </div>
       <label className="block">
         <span className="label">Objetivo estratégico</span>

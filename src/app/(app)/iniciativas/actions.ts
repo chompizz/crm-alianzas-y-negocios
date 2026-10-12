@@ -6,7 +6,7 @@ import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
 import { all, oneOf, str } from "@/lib/forms";
 import { parseDate } from "@/lib/format";
-import { COMMITMENT_PARTIES } from "@/lib/labels";
+import { COMMITMENT_PARTIES, DIMENSIONS } from "@/lib/labels";
 
 function readInitiative(fd: FormData) {
   const name = str(fd, "name");
@@ -14,6 +14,7 @@ function readInitiative(fd: FormData) {
   return {
     name,
     objective: str(fd, "objective"),
+    dimension: oneOf(fd, "dimension", DIMENSIONS, "ESTRATEGIA"),
     ownerId: str(fd, "ownerId"),
     allianceIds: all(fd, "alliances"),
     organizationIds: all(fd, "organizations"),

@@ -50,3 +50,24 @@ export const COMMITMENT_STATUSES = { PENDIENTE: "Pendiente", CUMPLIDO: "Cumplido
 export const HEALTH_DOT = { VERDE: "bg-emerald-500", AMARILLO: "bg-amber-400", ROJO: "bg-red-500" } as const;
 
 export const OPPORTUNITY_STATUSES = { ABIERTA: "Abierta", GANADA: "Ganada", DESCARTADA: "Descartada" } as const;
+
+export const DIMENSIONS = {
+  GOBERNANZA: "Gobernanza",
+  ESTRATEGIA: "Estrategia",
+  PRODUCTO: "Producto",
+  VENTAS: "Ventas",
+} as const;
+
+export const DIMENSION_DESCRIPTIONS: Record<keyof typeof DIMENSIONS, string> = {
+  GOBERNANZA: "Estructura societaria, socios, responsabilidades, acuerdos, alianzas y toma de decisiones.",
+  ESTRATEGIA: "Posicionamiento, expansión, nuevas oportunidades, partnerships tecnológicos y prioridades de negocio.",
+  PRODUCTO: "Desarrollo, funcionalidades, integraciones, tecnología, roadmap y evolución de las soluciones.",
+  VENTAS: "Pipeline comercial, clientes, propuestas, negociaciones, canales y objetivos de facturación.",
+};
+
+export const DIMENSION_STYLE: Record<keyof typeof DIMENSIONS, string> = {
+  GOBERNANZA: "border-violet-400/40 bg-violet-500/10 text-violet-300",
+  ESTRATEGIA: "border-cyan-400/40 bg-cyan-500/10 text-cyan-300",
+  PRODUCTO: "border-emerald-400/40 bg-emerald-500/10 text-emerald-300",
+  VENTAS: "border-amber-400/40 bg-amber-500/10 text-amber-300",
+};

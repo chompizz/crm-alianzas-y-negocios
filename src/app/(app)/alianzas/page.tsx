@@ -1,20 +1,22 @@
 import Link from "next/link";
-import type { AllianceStage, AllianceType, Prisma } from "@prisma/client";
+import type { AllianceStage, AllianceType, Dimension, Prisma } from "@prisma/client";
+import { DimensionBadge } from "@/components/dimension-badge";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
 import { fmtUsd } from "@/lib/format";
-import { ALLIANCE_STAGES, ALLIANCE_TYPES, HEALTH_DOT } from "@/lib/labels";
+import { ALLIANCE_STAGES, ALLIANCE_TYPES, DIMENSIONS, HEALTH_DOT } from "@/lib/labels";
 
 export default async function AlliancesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pais?: string; tipo?: string; resp?: string }>;
+  searchParams: Promise<{ pais?: string; tipo?: string; resp?: string; dim?: string }>;
 }) {
-  const { pais, tipo, resp } = await searchParams;
+  const { pais, tipo, resp, dim } = await searchParams;
   const where: Prisma.AllianceWhereInput = {};
   if (pais) where.countryCode = pais;
   if (tipo && tipo in ALLIANCE_TYPES) where.type = tipo as AllianceType;
   if (resp) where.ownerId = resp;
+  if (dim && dim in DIMENSIONS) where.dimension = dim as Dimension;
 
   const [alliances, countries, users] = await Promise.all([
     db.alliance.findMany({
@@ -50,6 +52,10 @@ export default async function AlliancesPage({
           <option value="">Todos los tipos</option>
           {Object.entries(ALLIANCE_TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        <select name="dim" defaultValue={dim ?? ""} className="input max-w-[12rem]">
+          <option value="">Todas las dimensiones</option>
+          {Object.entries(DIMENSIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
         <select name="resp" defaultValue={resp ?? ""} className="input max-w-[12rem]">
           <option value="">Todos los responsables</option>
           {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -73,6 +79,7 @@ export default async function AlliancesPage({
                       <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${HEALTH_DOT[a.health]}`} title={`Salud: ${a.health.toLowerCase()}`} />
                     </div>
                     <p className="mt-1 text-xs text-slate-500">{a.country.name} · {ALLIANCE_TYPES[a.type]}</p>
+                    <div className="mt-1.5"><DimensionBadge dimension={a.dimension} /></div>
                     {a.participants.length > 0 && (
                       <p className="mt-1 truncate text-xs text-slate-600">{a.participants.map((p) => p.organization.name).join(", ")}</p>
                     )}

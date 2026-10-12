@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { dateInput, fmtDate, fmtUsd } from "@/lib/format";
 import {
   ALLIANCE_STAGES,
-  ALLIANCE_TYPES,
+  ALLIANCE_TYPES, DIMENSIONS,
   COMMITMENT_PARTIES,
   HEALTH,
   HEALTH_DOT,
@@ -66,7 +66,7 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
     <>
       <PageHeader
         title={alliance.name}
-        subtitle={`${alliance.country.name} · ${ALLIANCE_TYPES[alliance.type]}`}
+        subtitle={`${alliance.country.name} · ${ALLIANCE_TYPES[alliance.type]} · ${DIMENSIONS[alliance.dimension]}`}
         actions={
           <>
             <Link href={`/alianzas/${id}/editar`} className="btn-secondary">Editar</Link>

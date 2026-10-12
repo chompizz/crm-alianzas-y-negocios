@@ -5,6 +5,7 @@ import type { User } from "@prisma/client";
 import { z } from "zod";
 import { userForToken } from "@/lib/api-tokens";
 import { revenueByCountry } from "@/lib/country-revenue";
+import { dimensionSummary } from "@/lib/dimension-summary";
 import { db } from "@/lib/db";
 import { parseDate, startOfTodayUtc } from "@/lib/format";
 import {
@@ -12,6 +13,8 @@ import {
   ALLIANCE_TYPES,
   COMMITMENT_PARTIES,
   COMMITMENT_STATUSES,
+  DIMENSION_DESCRIPTIONS,
+  DIMENSIONS,
   HEALTH,
   INTERACTION_TYPES,
   ORGANIZATION_TYPES,
@@ -19,6 +22,8 @@ import {
 } from "@/lib/labels";
 
 const keys = <T extends Record<string, string>>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
+
+const dimension = () => z.enum(keys(DIMENSIONS)).describe("GOBERNANZA, ESTRATEGIA, PRODUCTO o VENTAS");
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 const fail = (message: string) => ({ content: [{ type: "text" as const, text: message }], isError: true });
@@ -38,7 +43,8 @@ function buildServer(user: User) {
       instructions:
         "Nexo es el CRM interno de alianzas, estrategia y negocios del equipo. Cada alianza pertenece a un país; " +
         "una organización puede operar en varios países. Usá las herramientas de lectura antes de crear registros " +
-        "para no duplicar, y confirmá con la persona antes de crear o modificar datos. Fechas en formato AAAA-MM-DD.",
+        "para no duplicar, y confirmá con la persona antes de crear o modificar datos. Fechas en formato AAAA-MM-DD. " +
+        "El trabajo se organiza en cuatro dimensiones: Gobernanza, Estrategia, Producto y Ventas; alianzas, iniciativas y oportunidades pertenecen a una.",
     },
   );
 
@@ -76,6 +82,61 @@ function buildServer(user: User) {
         oportunidadesAbiertas: opportunities.length,
         valorPonderadoOportunidadesUSD: opportunities.reduce((s, o) => s + Number(o.estimatedValue ?? 0) * ((o.probability ?? 0) / 100), 0),
       });
+    },
+  );
+
+  server.registerTool(
+    "resumen_dimensiones",
+    {
+      title: "Resumen por dimensión",
+      description:
+        "Estado de las cuatro dimensiones (Gobernanza, Estrategia, Producto, Ventas): alianzas abiertas y su valor, " +
+        "iniciativas y su avance promedio, oportunidades abiertas ponderadas y compromisos pendientes.",
+      annotations: { readOnlyHint: true },
+    },
+    async () =>
+      json(
+        (await dimensionSummary()).map((d) => ({
+          dimension: DIMENSIONS[d.dimension],
+          incluye: DIMENSION_DESCRIPTIONS[d.dimension],
+          alianzasAbiertas: d.openAlliances,
+          valorEsperadoAlianzasUSD: d.allianceValue,
+          iniciativas: d.initiatives,
+          avancePromedioIniciativas: d.avgProgress,
+          oportunidadesAbiertas: d.openOpportunities,
+          oportunidadesPonderadasUSD: Math.round(d.weightedOpportunities),
+          compromisosPendientes: d.pendingCommitments,
+          alianzasRecientes: d.recentAlliances.map((a) => `${a.name} (${a.country})`),
+          iniciativasRecientes: d.recentInitiatives.map((i) => `${i.name} (${i.progress}%)`),
+        })),
+      ),
+  );
+
+  server.registerTool(
+    "listar_iniciativas",
+    {
+      title: "Listar iniciativas",
+      description: "Iniciativas con su dimensión, avance, responsable y alianzas que las impulsan. Filtro opcional por dimensión.",
+      inputSchema: { dimension: dimension().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ dimension }) => {
+      const initiatives = await db.initiative.findMany({
+        where: dimension ? { dimension } : {},
+        orderBy: { updatedAt: "desc" },
+        include: { owner: { select: { name: true } }, alliances: { select: { name: true } } },
+      });
+      return json(
+        initiatives.map((i) => ({
+          id: i.id,
+          nombre: i.name,
+          dimension: DIMENSIONS[i.dimension],
+          objetivo: i.objective,
+          avance: i.progress,
+          responsable: i.owner?.name ?? null,
+          alianzas: i.alliances.map((a) => a.name),
+        })),
+      );
     },
   );
 
@@ -209,21 +270,23 @@ function buildServer(user: User) {
     "listar_alianzas",
     {
       title: "Listar alianzas",
-      description: "Alianzas filtradas por país, etapa o texto.",
+      description: "Alianzas filtradas por país, etapa, dimensión o texto.",
       inputSchema: {
         pais: z.string().optional(),
+        dimension: dimension().optional(),
         etapa: z.enum(keys(ALLIANCE_STAGES)).optional(),
         texto: z.string().optional(),
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ pais, etapa, texto }) => {
+    async ({ pais, etapa, texto, dimension }) => {
       const country = pais ? await resolveCountry(pais) : null;
       if (pais && !country) return fail(`No encontré el país "${pais}".`);
       const alliances = await db.alliance.findMany({
         where: {
           ...(country ? { countryCode: country.code } : {}),
           ...(etapa ? { stage: etapa } : {}),
+          ...(dimension ? { dimension } : {}),
           ...(texto ? { name: { contains: texto, mode: "insensitive" } } : {}),
         },
         orderBy: { updatedAt: "desc" },
@@ -240,6 +303,7 @@ function buildServer(user: User) {
           nombre: a.name,
           pais: a.country.name,
           tipo: ALLIANCE_TYPES[a.type],
+          dimension: DIMENSIONS[a.dimension],
           etapa: ALLIANCE_STAGES[a.stage],
           salud: HEALTH[a.health],
           responsable: a.owner?.name ?? null,
@@ -277,6 +341,7 @@ function buildServer(user: User) {
         nombre: a.name,
         pais: a.country.name,
         tipo: ALLIANCE_TYPES[a.type],
+        dimension: DIMENSIONS[a.dimension],
         etapa: ALLIANCE_STAGES[a.stage],
         salud: HEALTH[a.health],
         objetivos: a.objectives,
@@ -305,6 +370,7 @@ function buildServer(user: User) {
           valorUSD: o.estimatedValue ? Number(o.estimatedValue) : null,
           probabilidad: o.probability,
           estado: o.status,
+          dimension: DIMENSIONS[o.dimension],
         })),
         iniciativas: a.initiatives.map((i) => ({ id: i.id, nombre: i.name, avance: i.progress })),
       });
@@ -321,12 +387,13 @@ function buildServer(user: User) {
         pais: z.string().describe("Código ISO o nombre"),
         tipo: z.enum(keys(ALLIANCE_TYPES)).optional(),
         etapa: z.enum(keys(ALLIANCE_STAGES)).optional(),
+        dimension: dimension().optional(),
         objetivos: z.string().optional(),
         valorEsperadoUSD: z.number().nonnegative().optional(),
         organizaciones: z.array(z.string()).optional().describe("Ids de organizaciones participantes"),
       },
     },
-    async ({ nombre, pais, tipo, etapa, objetivos, valorEsperadoUSD, organizaciones = [] }) => {
+    async ({ nombre, pais, tipo, etapa, dimension, objetivos, valorEsperadoUSD, organizaciones = [] }) => {
       const country = await resolveCountry(pais);
       if (!country) return fail(`No encontré el país "${pais}".`);
       const a = await db.alliance.create({
@@ -335,6 +402,7 @@ function buildServer(user: User) {
           countryCode: country.code,
           type: tipo ?? "COMERCIAL",
           stage: etapa ?? "EXPLORACION",
+          dimension: dimension ?? "ESTRATEGIA",
           objectives: objetivos,
           expectedValue: valorEsperadoUSD,
           ownerId: user.id,
@@ -349,19 +417,31 @@ function buildServer(user: User) {
     "actualizar_alianza",
     {
       title: "Actualizar alianza",
-      description: "Cambia la etapa, la salud o los objetivos de una alianza.",
+      description: "Cambia la etapa, la salud, la dimensión, el valor esperado o los objetivos de una alianza.",
       inputSchema: {
         id: z.string(),
         etapa: z.enum(keys(ALLIANCE_STAGES)).optional(),
         salud: z.enum(keys(HEALTH)).optional(),
+        dimension: dimension().optional(),
+        valorEsperadoUSD: z.number().nonnegative().optional(),
         objetivos: z.string().optional(),
       },
     },
-    async ({ id, etapa, salud, objetivos }) => {
+    async ({ id, etapa, salud, dimension, valorEsperadoUSD, objetivos }) => {
       const exists = await db.alliance.findUnique({ where: { id }, select: { id: true } });
       if (!exists) return fail("No existe esa alianza.");
-      const a = await db.alliance.update({ where: { id }, data: { stage: etapa, health: salud, objectives: objetivos } });
-      return json({ actualizada: true, id: a.id, etapa: ALLIANCE_STAGES[a.stage], salud: HEALTH[a.health] });
+      const a = await db.alliance.update({
+        where: { id },
+        data: { stage: etapa, health: salud, dimension, expectedValue: valorEsperadoUSD, objectives: objetivos },
+      });
+      return json({
+        actualizada: true,
+        id: a.id,
+        etapa: ALLIANCE_STAGES[a.stage],
+        salud: HEALTH[a.health],
+        dimension: DIMENSIONS[a.dimension],
+        valorEsperadoUSD: a.expectedValue ? Number(a.expectedValue) : null,
+      });
     },
   );
 
@@ -481,13 +561,14 @@ function buildServer(user: User) {
         descripcion: z.string().optional(),
         valorEstimadoUSD: z.number().nonnegative().optional(),
         probabilidad: z.number().int().min(0).max(100).optional(),
+        dimension: dimension().optional().describe("Por defecto VENTAS"),
       },
     },
-    async ({ alianzaId, titulo, descripcion, valorEstimadoUSD, probabilidad }) => {
+    async ({ alianzaId, titulo, descripcion, valorEstimadoUSD, probabilidad, dimension }) => {
       const exists = await db.alliance.findUnique({ where: { id: alianzaId }, select: { id: true } });
       if (!exists) return fail("No existe esa alianza.");
       const o = await db.opportunity.create({
-        data: { allianceId: alianzaId, title: titulo, description: descripcion, estimatedValue: valorEstimadoUSD, probability: probabilidad },
+        data: { allianceId: alianzaId, title: titulo, description: descripcion, estimatedValue: valorEstimadoUSD, probability: probabilidad, dimension: dimension ?? "VENTAS" },
       });
       return json({ creada: true, id: o.id, titulo: o.title });
     },

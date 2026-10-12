@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Opportunity } from "@prisma/client";
+import { DimensionSelect } from "@/components/dimension-select";
 import { OPPORTUNITY_STATUSES } from "@/lib/labels";
 
 type Props = {
@@ -40,6 +41,7 @@ export function OpportunityForm({ action, alliances, opportunity, defaultAllianc
             {Object.entries(OPPORTUNITY_STATUSES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
+        <DimensionSelect defaultValue={opportunity?.dimension ?? "VENTAS"} />
       </div>
       <label className="block">
         <span className="label">Descripción</span>

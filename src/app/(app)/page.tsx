@@ -3,9 +3,10 @@ import type { AllianceStage } from "@prisma/client";
 import { AllianceMap } from "@/components/alliance-map";
 import { PageHeader } from "@/components/page-header";
 import { revenueByCountry } from "@/lib/country-revenue";
+import { dimensionSummary } from "@/lib/dimension-summary";
 import { db } from "@/lib/db";
 import { fmtDate, fmtUsdCompact, startOfTodayUtc } from "@/lib/format";
-import { ALLIANCE_STAGES, HEALTH_DOT } from "@/lib/labels";
+import { ALLIANCE_STAGES, DIMENSION_STYLE, DIMENSIONS, HEALTH_DOT } from "@/lib/labels";
 
 const STALE_DAYS = 30;
 
@@ -35,7 +36,7 @@ export default async function DashboardPage() {
     select: { estimatedValue: true, probability: true },
   });
   const weightedPipeline = openOpportunities.reduce((s, o) => s + Number(o.estimatedValue ?? 0) * ((o.probability ?? 0) / 100), 0);
-  const countryRevenue = await revenueByCountry();
+  const [countryRevenue, dimensions] = await Promise.all([revenueByCountry(), dimensionSummary()]);
   const overdueTotal = await db.commitment.count({ where: { status: "PENDIENTE", dueDate: { lt: today } } });
   const multiCountry = orgCountryCounts.filter((o) => o._count.countries > 1).length;
 
@@ -66,6 +67,22 @@ export default async function DashboardPage() {
         <Stat label="Compromisos vencidos" value={String(overdueTotal)} hint="pendientes con fecha pasada" href="/compromisos?vista=vencidos" alert={overdueTotal > 0} />
         <Stat label="Organizaciones" value={String(organizations)} hint={`${multiCountry} multipaís`} href="/organizaciones" />
       </div>
+
+      <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {dimensions.map((d) => (
+          <Link key={d.dimension} href={`/dimensiones#${d.dimension.toLowerCase()}`} className="card block p-4 transition hover:border-indigo-300">
+            <div className="flex items-center justify-between">
+              <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${DIMENSION_STYLE[d.dimension]}`}>{DIMENSIONS[d.dimension]}</span>
+              <span className="font-mono text-xs text-slate-500">{d.avgProgress}% avance</span>
+            </div>
+            <p className="mt-3 text-sm text-slate-600">
+              <span className="font-mono text-lg font-semibold text-slate-900">{d.openAlliances}</span> alianzas ·{" "}
+              <span className="font-mono text-lg font-semibold text-slate-900">{d.initiatives}</span> iniciativas ·{" "}
+              <span className="font-mono text-lg font-semibold text-slate-900">{d.openOpportunities}</span> oport.
+            </p>
+          </Link>
+        ))}
+      </section>
 
       <AllianceMap data={countryRevenue} />
 

@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { db } from "@/lib/db";
 import { fmtDate, startOfTodayUtc } from "@/lib/format";
-import { COMMITMENT_PARTIES, HEALTH_DOT } from "@/lib/labels";
+import { COMMITMENT_PARTIES, DIMENSIONS, HEALTH_DOT } from "@/lib/labels";
 import { addInitiativeCommitment, addMilestone, deleteInitiative, deleteMilestone, toggleMilestone } from "../actions";
 
 export default async function InitiativePage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,7 +30,7 @@ export default async function InitiativePage({ params }: { params: Promise<{ id:
     <>
       <PageHeader
         title={initiative.name}
-        subtitle={initiative.owner ? `Responsable: ${initiative.owner.name}` : "Sin responsable"}
+        subtitle={`${DIMENSIONS[initiative.dimension]} · ${initiative.owner ? `Responsable: ${initiative.owner.name}` : "Sin responsable"}`}
         actions={
           <>
             <Link href={`/iniciativas/${id}/editar`} className="btn-secondary">Editar</Link>
