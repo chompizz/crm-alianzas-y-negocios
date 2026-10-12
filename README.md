@@ -45,6 +45,16 @@ El administrador crea al resto del equipo desde **Usuarios**.
 
 Cada push a `main` vuelve a publicar la aplicación.
 
+## Conectar con Claude
+
+Nexo incluye un conector MCP para usarlo desde Claude: consultar el portafolio, alianzas y compromisos, registrar reuniones con sus acuerdos y crear organizaciones, alianzas u oportunidades conversando.
+
+1. Cada persona entra a Nexo, abre **Conectar con Claude** y genera su conector. La dirección completa se muestra una sola vez.
+2. En Claude: **Configuración → Conectores → Agregar conector personalizado**, y pegar esa dirección.
+3. Claude actúa con el usuario dueño del token. El acceso se corta desde la misma página con **Revocar**.
+
+La dirección incluye el token, así que hay que tratarla como una contraseña. Para clientes que permiten cabeceras también funciona `POST /api/mcp` con `Authorization: Bearer <token>`.
+
 ## Stack
 
 Next.js 15 (App Router, server actions) · TypeScript · Tailwind CSS · PostgreSQL + Prisma · Auth.js (email y contraseña).

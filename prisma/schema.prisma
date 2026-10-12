@@ -26,6 +26,21 @@ model User {
   initiatives  Initiative[]  @relation("InitiativeOwner")
   commitments  Commitment[]  @relation("CommitmentOwner")
   interactions Interaction[] @relation("InteractionAuthor")
+  apiTokens    ApiToken[]
+}
+
+// Token personal para conectar Nexo a Claude (u otro cliente MCP).
+// Solo se guarda el hash; el token completo se muestra una única vez.
+model ApiToken {
+  id         String    @id @default(cuid())
+  name       String
+  tokenHash  String    @unique
+  prefix     String // primeros caracteres, para reconocerlo en la lista
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
 }
 
 // ---------- Ecosistema ----------
