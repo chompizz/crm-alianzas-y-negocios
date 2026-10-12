@@ -1,0 +1,255 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Usuarios ----------
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(MEMBER)
+  createdAt    DateTime @default(now())
+
+  alliances    Alliance[]    @relation("AllianceOwner")
+  initiatives  Initiative[]  @relation("InitiativeOwner")
+  commitments  Commitment[]  @relation("CommitmentOwner")
+  interactions Interaction[] @relation("InteractionAuthor")
+}
+
+// ---------- Ecosistema ----------
+
+model Country {
+  code String @id // ISO 3166-1 alfa-2, p. ej. "CL"
+  name String
+
+  organizations Organization[]
+  contacts      Contact[]
+  alliances     Alliance[]
+}
+
+enum OrganizationType {
+  EMPRESA
+  ONG
+  GOBIERNO
+  UNIVERSIDAD
+  FONDO
+  OTRO
+}
+
+model Organization {
+  id           String           @id @default(cuid())
+  name         String
+  type         OrganizationType @default(EMPRESA)
+  sector       String?
+  website      String?
+  description  String?
+  capabilities String[]
+  tags         String[]
+  // Una organización puede operar en varios países (socio multipaís).
+  countries    Country[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  contacts       Contact[]
+  participations AllianceParticipant[]
+  initiatives    Initiative[]
+}
+
+enum RelationshipLevel {
+  FRIA
+  TIBIA
+  CERCANA
+}
+
+model Contact {
+  id                String            @id @default(cuid())
+  name              String
+  position          String?
+  email             String?
+  phone             String?
+  relationshipLevel RelationshipLevel @default(TIBIA)
+  notes             String?
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  countryCode       String?
+  country           Country?          @relation(fields: [countryCode], references: [code])
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  interactions Interaction[]
+}
+
+// ---------- Alianzas ----------
+
+enum AllianceType {
+  COMERCIAL
+  TECNOLOGICA
+  INSTITUCIONAL
+  INVERSION
+  OTRA
+}
+
+enum AllianceStage {
+  EXPLORACION
+  EVALUACION
+  NEGOCIACION
+  ACTIVA
+  EN_REVISION
+  CERRADA
+}
+
+enum Health {
+  VERDE
+  AMARILLO
+  ROJO
+}
+
+model Alliance {
+  id            String        @id @default(cuid())
+  name          String
+  // Cada alianza pertenece a un país.
+  countryCode   String
+  country       Country       @relation(fields: [countryCode], references: [code])
+  type          AllianceType  @default(COMERCIAL)
+  stage         AllianceStage @default(EXPLORACION)
+  health        Health        @default(VERDE)
+  objectives    String?
+  expectedValue Decimal?      @db.Decimal(14, 2) // USD
+  startDate     DateTime?
+  renewalDate   DateTime?
+  ownerId       String?
+  owner         User?         @relation("AllianceOwner", fields: [ownerId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  participants  AllianceParticipant[]
+  opportunities Opportunity[]
+  initiatives   Initiative[]
+  interactions  Interaction[]
+  commitments   Commitment[]
+}
+
+model AllianceParticipant {
+  allianceId     String
+  alliance       Alliance     @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           String? // líder, socio, financiador...
+
+  @@id([allianceId, organizationId])
+}
+
+enum OpportunityStatus {
+  ABIERTA
+  GANADA
+  DESCARTADA
+}
+
+model Opportunity {
+  id             String            @id @default(cuid())
+  title          String
+  description    String?
+  estimatedValue Decimal?          @db.Decimal(14, 2) // USD
+  probability    Int? // 0 a 100
+  status         OpportunityStatus @default(ABIERTA)
+  allianceId     String
+  alliance       Alliance          @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+// ---------- Iniciativas ----------
+
+model Initiative {
+  id            String         @id @default(cuid())
+  name          String
+  objective     String?
+  progress      Int            @default(0) // 0 a 100
+  ownerId       String?
+  owner         User?          @relation("InitiativeOwner", fields: [ownerId], references: [id])
+  alliances     Alliance[]
+  organizations Organization[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  milestones   Milestone[]
+  interactions Interaction[]
+  commitments  Commitment[]
+}
+
+model Milestone {
+  id           String     @id @default(cuid())
+  title        String
+  dueDate      DateTime?
+  done         Boolean    @default(false)
+  initiativeId String
+  initiative   Initiative @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Interacciones y compromisos ----------
+
+enum InteractionType {
+  REUNION
+  LLAMADA
+  EMAIL
+  EVENTO
+  NOTA
+}
+
+model Interaction {
+  id           String          @id @default(cuid())
+  date         DateTime
+  type         InteractionType @default(REUNION)
+  summary      String
+  allianceId   String?
+  alliance     Alliance?       @relation(fields: [allianceId], references: [id], onDelete: SetNull)
+  initiativeId String?
+  initiative   Initiative?     @relation(fields: [initiativeId], references: [id], onDelete: SetNull)
+  contacts     Contact[]
+  authorId     String?
+  author       User?           @relation("InteractionAuthor", fields: [authorId], references: [id])
+  createdAt    DateTime        @default(now())
+
+  commitments Commitment[]
+}
+
+enum CommitmentParty {
+  NOSOTROS
+  SOCIO
+}
+
+enum CommitmentStatus {
+  PENDIENTE
+  CUMPLIDO
+  CANCELADO
+}
+
+model Commitment {
+  id            String           @id @default(cuid())
+  description   String
+  party         CommitmentParty  @default(NOSOTROS)
+  status        CommitmentStatus @default(PENDIENTE)
+  dueDate       DateTime?
+  ownerId       String?
+  owner         User?            @relation("CommitmentOwner", fields: [ownerId], references: [id])
+  interactionId String?
+  interaction   Interaction?     @relation(fields: [interactionId], references: [id], onDelete: SetNull)
+  allianceId    String?
+  alliance      Alliance?        @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  initiativeId  String?
+  initiative    Initiative?      @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+}
