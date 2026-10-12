@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Alliance, Country, User } from "@prisma/client";
+import { DimensionSelect } from "@/components/dimension-select";
 import { dateInput } from "@/lib/format";
 import { ALLIANCE_STAGES, ALLIANCE_TYPES, HEALTH } from "@/lib/labels";
 
@@ -37,6 +38,7 @@ export function AllianceForm({ action, countries, users, alliance, organizations
             {Object.entries(ALLIANCE_TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
+        <DimensionSelect defaultValue={alliance?.dimension ?? "ESTRATEGIA"} />
         <label>
           <span className="label">Etapa</span>
           <select name="stage" defaultValue={alliance?.stage ?? "EXPLORACION"} className="input">

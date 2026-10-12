@@ -4,6 +4,7 @@ import { NavLink } from "./nav-link";
 
 const NAV = [
   { href: "/", label: "Tablero" },
+  { href: "/dimensiones", label: "Dimensiones" },
   { href: "/organizaciones", label: "Organizaciones" },
   { href: "/contactos", label: "Contactos" },
   { href: "/alianzas", label: "Alianzas" },

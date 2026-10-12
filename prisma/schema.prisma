@@ -125,6 +125,14 @@ enum AllianceStage {
   CERRADA
 }
 
+// Las cuatro dimensiones en que el equipo organiza su trabajo.
+enum Dimension {
+  GOBERNANZA
+  ESTRATEGIA
+  PRODUCTO
+  VENTAS
+}
+
 enum Health {
   VERDE
   AMARILLO
@@ -138,6 +146,7 @@ model Alliance {
   countryCode   String
   country       Country       @relation(fields: [countryCode], references: [code])
   type          AllianceType  @default(COMERCIAL)
+  dimension     Dimension     @default(ESTRATEGIA)
   stage         AllianceStage @default(EXPLORACION)
   health        Health        @default(VERDE)
   objectives    String?
@@ -179,6 +188,7 @@ model Opportunity {
   estimatedValue Decimal?          @db.Decimal(14, 2) // USD
   probability    Int? // 0 a 100
   status         OpportunityStatus @default(ABIERTA)
+  dimension      Dimension         @default(VENTAS)
   allianceId     String
   alliance       Alliance          @relation(fields: [allianceId], references: [id], onDelete: Cascade)
   createdAt      DateTime          @default(now())
@@ -192,6 +202,7 @@ model Initiative {
   name          String
   objective     String?
   progress      Int            @default(0) // 0 a 100
+  dimension     Dimension      @default(ESTRATEGIA)
   ownerId       String?
   owner         User?          @relation("InitiativeOwner", fields: [ownerId], references: [id])
   alliances     Alliance[]

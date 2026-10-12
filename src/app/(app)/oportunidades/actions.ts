@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
 import { oneOf, str } from "@/lib/forms";
-import { OPPORTUNITY_STATUSES } from "@/lib/labels";
+import { DIMENSIONS, OPPORTUNITY_STATUSES } from "@/lib/labels";
 
 function readOpportunity(fd: FormData) {
   const title = str(fd, "title");
@@ -20,6 +20,7 @@ function readOpportunity(fd: FormData) {
     estimatedValue: value ? value.replace(/[^\d.]/g, "") || null : null,
     probability: Number.isFinite(prob) && str(fd, "probability") ? Math.min(100, Math.max(0, Math.round(prob))) : null,
     status: oneOf(fd, "status", OPPORTUNITY_STATUSES, "ABIERTA"),
+    dimension: oneOf(fd, "dimension", DIMENSIONS, "VENTAS"),
   };
 }
 

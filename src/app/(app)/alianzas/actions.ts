@@ -11,6 +11,7 @@ import {
   ALLIANCE_TYPES,
   COMMITMENT_PARTIES,
   COMMITMENT_STATUSES,
+  DIMENSIONS,
   HEALTH,
   INTERACTION_TYPES,
 } from "@/lib/labels";
@@ -24,6 +25,7 @@ function readAlliance(fd: FormData) {
     name,
     countryCode,
     type: oneOf(fd, "type", ALLIANCE_TYPES, "COMERCIAL"),
+    dimension: oneOf(fd, "dimension", DIMENSIONS, "ESTRATEGIA"),
     stage: oneOf(fd, "stage", ALLIANCE_STAGES, "EXPLORACION"),
     health: oneOf(fd, "health", HEALTH, "VERDE"),
     objectives: str(fd, "objectives"),
