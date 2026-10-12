@@ -149,3 +149,13 @@ export async function setCommitmentStatus(id: string, fd: FormData) {
   if (c.allianceId) revalidatePath(`/alianzas/${c.allianceId}`);
   revalidatePath("/compromisos");
 }
+
+// Usada por el tablero kanban al arrastrar una tarjeta a otra etapa.
+export async function setAllianceStage(id: string, stage: string) {
+  await requireUser();
+  if (!(stage in ALLIANCE_STAGES)) throw new Error("Etapa inválida");
+  await db.alliance.update({ where: { id }, data: { stage: stage as keyof typeof ALLIANCE_STAGES } });
+  revalidatePath("/alianzas");
+  revalidatePath(`/alianzas/${id}`);
+  revalidatePath("/");
+}
