@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CommitmentRow } from "@/components/commitment-row";
 import { PageHeader } from "@/components/page-header";
+import { ProgressBar } from "@/components/progress-bar";
 import { db } from "@/lib/db";
 import { dateInput, fmtDate, fmtUsd } from "@/lib/format";
 import {
@@ -11,6 +12,7 @@ import {
   HEALTH,
   HEALTH_DOT,
   INTERACTION_TYPES,
+  OPPORTUNITY_STATUSES,
 } from "@/lib/labels";
 import {
   addCommitment,
@@ -40,6 +42,8 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
         orderBy: [{ status: "asc" }, { dueDate: "asc" }],
         include: { owner: { select: { name: true } } },
       },
+      opportunities: { orderBy: { createdAt: "desc" } },
+      initiatives: { orderBy: { name: "asc" }, select: { id: true, name: true, progress: true } },
     },
   });
   if (!alliance) notFound();
@@ -137,6 +141,41 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
         </div>
 
         <div className="space-y-6 lg:col-span-2">
+          <div className="grid gap-6 xl:grid-cols-2">
+            <section className="card">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="font-semibold">Oportunidades</h2>
+                <Link href={`/oportunidades/nueva?alianza=${id}`} className="text-sm text-indigo-700 hover:underline">Agregar</Link>
+              </div>
+              <ul className="divide-y divide-slate-100 text-sm">
+                {alliance.opportunities.map((o) => (
+                  <li key={o.id} className="flex justify-between gap-2 py-2">
+                    <Link href={`/oportunidades/${o.id}/editar`} className="hover:underline">{o.title}</Link>
+                    <span className="shrink-0 text-xs text-slate-500">
+                      {fmtUsd(o.estimatedValue)}{o.probability != null && ` · ${o.probability}%`} · {OPPORTUNITY_STATUSES[o.status]}
+                    </span>
+                  </li>
+                ))}
+                {alliance.opportunities.length === 0 && <li className="py-2 text-slate-500">Sin oportunidades.</li>}
+              </ul>
+            </section>
+            <section className="card">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="font-semibold">Iniciativas</h2>
+                <Link href="/iniciativas/nueva" className="text-sm text-indigo-700 hover:underline">Nueva</Link>
+              </div>
+              <ul className="space-y-3 text-sm">
+                {alliance.initiatives.map((i) => (
+                  <li key={i.id}>
+                    <Link href={`/iniciativas/${i.id}`} className="hover:underline">{i.name}</Link>
+                    <ProgressBar value={i.progress} />
+                  </li>
+                ))}
+                {alliance.initiatives.length === 0 && <li className="text-slate-500">Sin iniciativas.</li>}
+              </ul>
+            </section>
+          </div>
+
           <section className="card">
             <h2 className="mb-3 font-semibold">Compromisos</h2>
             <div className="overflow-x-auto">

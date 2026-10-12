@@ -3,17 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export function NavLink({ href, soon, children }: { href: string; soon?: boolean; children: React.ReactNode }) {
+export function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-  if (soon) {
-    return (
-      <span className="flex items-center justify-between whitespace-nowrap rounded-md px-3 py-2 text-sm text-slate-400">
-        {children}
-        <span className="ml-2 text-[10px] uppercase">pronto</span>
-      </span>
-    );
-  }
   return (
     <Link
       href={href}

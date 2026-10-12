@@ -28,6 +28,11 @@ export default async function DashboardPage() {
     db.organization.count(),
     db.organization.findMany({ select: { _count: { select: { countries: true } } } }),
   ]);
+  const openOpportunities = await db.opportunity.findMany({
+    where: { status: "ABIERTA", alliance: { stage: { not: "CERRADA" } } },
+    select: { estimatedValue: true, probability: true },
+  });
+  const weightedPipeline = openOpportunities.reduce((s, o) => s + Number(o.estimatedValue ?? 0) * ((o.probability ?? 0) / 100), 0);
   const overdueTotal = await db.commitment.count({ where: { status: "PENDIENTE", dueDate: { lt: today } } });
   const multiCountry = orgCountryCounts.filter((o) => o._count.countries > 1).length;
 
@@ -51,9 +56,10 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title="Tablero" subtitle="Portafolio de alianzas" />
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Stat label="Alianzas abiertas" value={String(alliances.length)} hint={`${active} activas`} href="/alianzas" />
         <Stat label="Valor esperado" value={fmtUsd(expected)} hint="alianzas abiertas" href="/alianzas" />
+        <Stat label="Oportunidades" value={fmtUsd(weightedPipeline)} hint={`${openOpportunities.length} abiertas, valor ponderado`} href="/oportunidades" />
         <Stat label="Compromisos vencidos" value={String(overdueTotal)} hint="pendientes con fecha pasada" href="/compromisos?vista=vencidos" alert={overdueTotal > 0} />
         <Stat label="Organizaciones" value={String(organizations)} hint={`${multiCountry} multipaís`} href="/organizaciones" />
       </div>
