@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { User } from "@prisma/client";
@@ -13,6 +14,7 @@ import {
   HEALTH,
   INTERACTION_TYPES,
   ORGANIZATION_TYPES,
+  ROLES,
 } from "@/lib/labels";
 
 const keys = <T extends Record<string, string>>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
@@ -466,6 +468,95 @@ function buildServer(user: User) {
         data: { allianceId: alianzaId, title: titulo, description: descripcion, estimatedValue: valorEstimadoUSD, probability: probabilidad },
       });
       return json({ creada: true, id: o.id, titulo: o.title });
+    },
+  );
+
+  server.registerTool(
+    "listar_usuarios",
+    {
+      title: "Listar usuarios",
+      description: "Personas del equipo con acceso a Nexo (id, nombre, email, rol). Sirve para asignar responsables.",
+      annotations: { readOnlyHint: true },
+    },
+    async () =>
+      json(
+        (await db.user.findMany({ orderBy: { name: "asc" } })).map((u) => ({ id: u.id, nombre: u.name, email: u.email, rol: ROLES[u.role] })),
+      ),
+  );
+
+  const soloAdmin = () => (user.role === "ADMIN" ? null : fail("Solo un administrador puede gestionar usuarios."));
+  const rol = z.enum(keys(ROLES));
+
+  server.registerTool(
+    "crear_usuario",
+    {
+      title: "Crear usuario (admin)",
+      description: "Da de alta a una persona del equipo. Solo administradores. La contraseña inicial debe tener 8 caracteres o más.",
+      inputSchema: { nombre: z.string(), email: z.string().email(), contrasenaInicial: z.string().min(8), rol: rol.optional() },
+    },
+    async ({ nombre, email, contrasenaInicial, rol }) => {
+      const denied = soloAdmin();
+      if (denied) return denied;
+      const mail = email.trim().toLowerCase();
+      if (await db.user.findUnique({ where: { email: mail } })) return fail("Ya existe un usuario con ese email.");
+      const u = await db.user.create({
+        data: { name: nombre, email: mail, role: rol ?? "MEMBER", passwordHash: await bcrypt.hash(contrasenaInicial, 10) },
+      });
+      return json({ creado: true, id: u.id, email: u.email, rol: ROLES[u.role] });
+    },
+  );
+
+  server.registerTool(
+    "actualizar_usuario",
+    {
+      title: "Actualizar usuario (admin)",
+      description: "Cambia nombre, email, rol o contraseña de un usuario. Solo administradores; un admin no puede quitarse su propio rol.",
+      inputSchema: {
+        usuarioId: z.string(),
+        nombre: z.string().optional(),
+        email: z.string().email().optional(),
+        rol: rol.optional(),
+        nuevaContrasena: z.string().min(8).optional(),
+      },
+    },
+    async ({ usuarioId, nombre, email, rol, nuevaContrasena }) => {
+      const denied = soloAdmin();
+      if (denied) return denied;
+      if (!(await db.user.findUnique({ where: { id: usuarioId } }))) return fail("No existe ese usuario.");
+      if (usuarioId === user.id && rol && rol !== "ADMIN") return fail("No podés quitarte tu propio rol de administrador.");
+      const mail = email?.trim().toLowerCase();
+      if (mail) {
+        const other = await db.user.findUnique({ where: { email: mail } });
+        if (other && other.id !== usuarioId) return fail("Ya existe otro usuario con ese email.");
+      }
+      const u = await db.user.update({
+        where: { id: usuarioId },
+        data: {
+          name: nombre,
+          email: mail,
+          role: rol,
+          ...(nuevaContrasena ? { passwordHash: await bcrypt.hash(nuevaContrasena, 10) } : {}),
+        },
+      });
+      return json({ actualizado: true, id: u.id, nombre: u.name, email: u.email, rol: ROLES[u.role] });
+    },
+  );
+
+  server.registerTool(
+    "eliminar_usuario",
+    {
+      title: "Eliminar usuario (admin)",
+      description: "Da de baja a un usuario. Sus alianzas, iniciativas y compromisos quedan sin responsable. Solo administradores.",
+      inputSchema: { usuarioId: z.string() },
+      annotations: { destructiveHint: true },
+    },
+    async ({ usuarioId }) => {
+      const denied = soloAdmin();
+      if (denied) return denied;
+      if (usuarioId === user.id) return fail("No podés eliminar tu propio usuario.");
+      if (!(await db.user.findUnique({ where: { id: usuarioId } }))) return fail("No existe ese usuario.");
+      await db.user.delete({ where: { id: usuarioId } });
+      return json({ eliminado: true, id: usuarioId });
     },
   );
 
