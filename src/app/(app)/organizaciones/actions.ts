@@ -19,6 +19,7 @@ function readOrganization(fd: FormData) {
     capabilities: list(fd, "capabilities"),
     tags: list(fd, "tags"),
     countryCodes: all(fd, "countries"),
+    parentId: str(fd, "parentId"),
   };
 }
 
@@ -35,12 +36,28 @@ export async function createOrganization(fd: FormData) {
 export async function updateOrganization(id: string, fd: FormData) {
   await requireUser();
   const { countryCodes, ...data } = readOrganization(fd);
+  if (data.parentId && (await wouldCycle(id, data.parentId))) {
+    throw new Error("Ese grupo no puede ser una filial de esta organización");
+  }
   await db.organization.update({
     where: { id },
     data: { ...data, countries: { set: countryCodes.map((code) => ({ code })) } },
   });
   revalidatePath("/organizaciones");
   redirect(`/organizaciones/${id}`);
+}
+
+async function wouldCycle(id: string, parentId: string) {
+  let current: string | null = parentId;
+  for (let i = 0; current && i < 50; i++) {
+    if (current === id) return true;
+    const next: { parentId: string | null } | null = await db.organization.findUnique({
+      where: { id: current },
+      select: { parentId: true },
+    });
+    current = next?.parentId ?? null;
+  }
+  return false;
 }
 
 export async function deleteOrganization(id: string) {

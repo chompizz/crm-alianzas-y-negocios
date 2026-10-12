@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CommitmentRow } from "@/components/commitment-row";
+import { OfferingsSection } from "@/components/offerings-section";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { db } from "@/lib/db";
@@ -13,6 +14,7 @@ import {
   HEALTH_DOT,
   INTERACTION_TYPES,
   OPPORTUNITY_STATUSES,
+  PARTICIPANT_ROLES,
 } from "@/lib/labels";
 import {
   addCommitment,
@@ -32,7 +34,11 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
       owner: { select: { name: true } },
       participants: {
         orderBy: { organization: { name: "asc" } },
-        include: { organization: { include: { contacts: { orderBy: { name: "asc" } } } } },
+        include: {
+          organization: {
+            include: { contacts: { orderBy: { name: "asc" } }, parent: { select: { id: true, name: true } } },
+          },
+        },
       },
       interactions: {
         orderBy: { date: "desc" },
@@ -44,17 +50,19 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
       },
       opportunities: { orderBy: { createdAt: "desc" } },
       initiatives: { orderBy: { name: "asc" }, select: { id: true, name: true, progress: true } },
+      offerings: { select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } },
     },
   });
   if (!alliance) notFound();
 
-  const [organizations, users] = await Promise.all([
+  const [organizations, users, catalog] = await Promise.all([
     db.organization.findMany({
       where: { id: { notIn: alliance.participants.map((p) => p.organizationId) } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, countries: { select: { code: true } } },
     }),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.offering.findMany({ select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } }),
   ]);
   // Primero las organizaciones que operan en el país de la alianza.
   const inCountry = organizations.filter((o) => o.countries.some((c) => c.code === alliance.countryCode));
@@ -106,10 +114,12 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
             <h2 className="mb-3 font-semibold">Participantes</h2>
             <ul className="mb-3 divide-y divide-slate-100">
               {alliance.participants.map((p) => (
-                <li key={p.organizationId} className="flex items-center justify-between py-2 text-sm">
+                <li key={p.organizationId} className="flex items-center justify-between gap-2 py-2 text-sm">
                   <span>
                     <Link href={`/organizaciones/${p.organizationId}`} className="font-medium text-indigo-700 hover:underline">{p.organization.name}</Link>
-                    {p.role && <span className="ml-2 chip">{p.role}</span>}
+                    <span className="ml-2 chip">{PARTICIPANT_ROLES[p.roleType]}</span>
+                    {p.role && <span className="block text-xs text-slate-500">{p.role}</span>}
+                    {p.organization.parent && <span className="block text-xs text-slate-500">Grupo {p.organization.parent.name}</span>}
                   </span>
                   <form action={removeParticipant.bind(null, id, p.organizationId)}>
                     <button className="text-xs text-slate-400 hover:text-red-600">Quitar</button>
@@ -133,11 +143,23 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
                 )}
               </select>
               <div className="flex gap-2">
-                <input name="role" placeholder="Rol (líder, socio, financiador)" className="input" />
+                <select name="roleType" defaultValue="SOCIO" className="input">
+                  {Object.entries(PARTICIPANT_ROLES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
                 <button className="btn-secondary">Agregar</button>
               </div>
+              <input name="role" placeholder="Detalle del rol (opcional): aporta tecnología, co-financia 30%..." className="input" />
             </form>
           </section>
+
+          <OfferingsSection
+            target="alianza"
+            targetId={id}
+            assigned={alliance.offerings}
+            available={catalog}
+            title="Productos y servicios"
+            hint="Qué se vende, integra o entrega en esta alianza."
+          />
         </div>
 
         <div className="space-y-6 lg:col-span-2">

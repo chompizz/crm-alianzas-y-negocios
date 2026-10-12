@@ -71,3 +71,23 @@ export const DIMENSION_STYLE: Record<keyof typeof DIMENSIONS, string> = {
   PRODUCTO: "border-emerald-400/40 bg-emerald-500/10 text-emerald-300",
   VENTAS: "border-amber-400/40 bg-amber-500/10 text-amber-300",
 };
+
+export const PARTICIPANT_ROLES = {
+  LIDER: "Líder",
+  SOCIO: "Socio estratégico",
+  PROVEEDOR: "Proveedor",
+  CLIENTE: "Cliente",
+  CANAL: "Canal / distribuidor",
+  INTEGRADOR: "Integrador",
+  FINANCIADOR: "Financiador",
+  INSTITUCIONAL: "Institucional",
+  OTRO: "Otro",
+} as const;
+
+export const OFFERING_KINDS = { PRODUCTO: "Producto", SERVICIO: "Servicio", OTRO: "Otro" } as const;
+
+export const OFFERING_STYLE: Record<keyof typeof OFFERING_KINDS, string> = {
+  PRODUCTO: "border-sky-400/40 bg-sky-500/10 text-sky-300",
+  SERVICIO: "border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-300",
+  OTRO: "border-slate-300 bg-slate-100 text-slate-700",
+};

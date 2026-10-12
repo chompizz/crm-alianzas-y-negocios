@@ -74,12 +74,17 @@ model Organization {
   tags         String[]
   // Una organización puede operar en varios países (socio multipaís).
   countries    Country[]
+  // Grupo o casa matriz (p. ej. la filial de un país pertenece a un grupo regional).
+  parentId     String?
+  parent       Organization?    @relation("OrganizationGroup", fields: [parentId], references: [id], onDelete: SetNull)
+  subsidiaries Organization[]   @relation("OrganizationGroup")
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
   contacts       Contact[]
   participations AllianceParticipant[]
   initiatives    Initiative[]
+  offerings      Offering[]
 }
 
 enum RelationshipLevel {
@@ -159,6 +164,7 @@ model Alliance {
   updatedAt     DateTime      @updatedAt
 
   participants  AllianceParticipant[]
+  offerings     Offering[]
   opportunities Opportunity[]
   initiatives   Initiative[]
   interactions  Interaction[]
@@ -170,9 +176,42 @@ model AllianceParticipant {
   alliance       Alliance     @relation(fields: [allianceId], references: [id], onDelete: Cascade)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role           String? // líder, socio, financiador...
+  roleType       ParticipantRole @default(SOCIO)
+  role           String? // detalle libre del rol
 
   @@id([allianceId, organizationId])
+}
+
+enum ParticipantRole {
+  LIDER
+  SOCIO
+  PROVEEDOR
+  CLIENTE
+  CANAL
+  INTEGRADOR
+  FINANCIADOR
+  INSTITUCIONAL
+  OTRO
+}
+
+// ---------- Catálogo ----------
+
+enum OfferingKind {
+  PRODUCTO
+  SERVICIO
+  OTRO
+}
+
+// Productos, servicios u otros que ofrecen las organizaciones y que se comercializan o integran en las alianzas.
+model Offering {
+  id            String         @id @default(cuid())
+  name          String
+  kind          OfferingKind   @default(PRODUCTO)
+  description   String?
+  organizations Organization[]
+  alliances     Alliance[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 enum OpportunityStatus {

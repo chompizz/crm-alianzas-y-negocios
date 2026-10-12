@@ -14,6 +14,7 @@ import {
   DIMENSIONS,
   HEALTH,
   INTERACTION_TYPES,
+  PARTICIPANT_ROLES,
 } from "@/lib/labels";
 
 function readAlliance(fd: FormData) {
@@ -72,10 +73,11 @@ export async function addParticipant(allianceId: string, fd: FormData) {
   await requireUser();
   const organizationId = str(fd, "organizationId");
   if (!organizationId) return;
+  const roleType = oneOf(fd, "roleType", PARTICIPANT_ROLES, "SOCIO");
   await db.allianceParticipant.upsert({
     where: { allianceId_organizationId: { allianceId, organizationId } },
-    update: { role: str(fd, "role") },
-    create: { allianceId, organizationId, role: str(fd, "role") },
+    update: { role: str(fd, "role"), roleType },
+    create: { allianceId, organizationId, role: str(fd, "role"), roleType },
   });
   revalidatePath(`/alianzas/${allianceId}`);
 }
