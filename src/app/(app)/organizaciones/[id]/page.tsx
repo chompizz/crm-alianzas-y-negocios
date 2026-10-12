@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
-import { ORGANIZATION_TYPES, RELATIONSHIP_LEVELS } from "@/lib/labels";
+import { ALLIANCE_STAGES, HEALTH_DOT, ORGANIZATION_TYPES, RELATIONSHIP_LEVELS } from "@/lib/labels";
 import { deleteOrganization } from "../actions";
 
 export default async function OrganizationPage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,6 +12,10 @@ export default async function OrganizationPage({ params }: { params: Promise<{ i
     include: {
       countries: { orderBy: { name: "asc" } },
       contacts: { orderBy: { name: "asc" }, include: { country: true } },
+      participations: {
+        include: { alliance: { include: { country: true } } },
+        orderBy: { alliance: { country: { name: "asc" } } },
+      },
     },
   });
   if (!org) notFound();
@@ -80,7 +84,27 @@ export default async function OrganizationPage({ params }: { params: Promise<{ i
               {org.contacts.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-slate-500">Sin contactos todavía.</td></tr>}
             </tbody>
           </table>
-          <p className="mt-4 text-xs text-slate-400">Las alianzas en las que participa aparecerán aquí en la próxima etapa.</p>
+        </section>
+
+        <section className="card lg:col-span-3">
+          <h2 className="mb-3 font-semibold">Alianzas en las que participa</h2>
+          <table className="table">
+            <thead><tr><th>Alianza</th><th>País</th><th>Rol</th><th>Etapa</th></tr></thead>
+            <tbody>
+              {org.participations.map((p) => (
+                <tr key={p.allianceId}>
+                  <td>
+                    <span className={`mr-2 inline-block h-2 w-2 rounded-full ${HEALTH_DOT[p.alliance.health]}`} />
+                    <Link href={`/alianzas/${p.allianceId}`} className="font-medium text-indigo-700 hover:underline">{p.alliance.name}</Link>
+                  </td>
+                  <td>{p.alliance.country.name}</td>
+                  <td>{p.role}</td>
+                  <td>{ALLIANCE_STAGES[p.alliance.stage]}</td>
+                </tr>
+              ))}
+              {org.participations.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-slate-500">Todavía no participa en ninguna alianza.</td></tr>}
+            </tbody>
+          </table>
         </section>
       </div>
     </>

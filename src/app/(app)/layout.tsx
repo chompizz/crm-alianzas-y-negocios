@@ -6,10 +6,10 @@ const NAV = [
   { href: "/", label: "Tablero" },
   { href: "/organizaciones", label: "Organizaciones" },
   { href: "/contactos", label: "Contactos" },
-  { href: "/alianzas", label: "Alianzas", soon: true },
+  { href: "/alianzas", label: "Alianzas" },
   { href: "/oportunidades", label: "Oportunidades", soon: true },
   { href: "/iniciativas", label: "Iniciativas", soon: true },
-  { href: "/compromisos", label: "Compromisos", soon: true },
+  { href: "/compromisos", label: "Compromisos" },
 ];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {

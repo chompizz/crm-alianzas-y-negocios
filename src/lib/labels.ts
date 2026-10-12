@@ -34,3 +34,17 @@ export const ALLIANCE_STAGES = {
 export const HEALTH = { VERDE: "Verde", AMARILLO: "Amarillo", ROJO: "Rojo" } as const;
 
 export const ROLES = { ADMIN: "Administrador", MEMBER: "Miembro" } as const;
+
+export const INTERACTION_TYPES = {
+  REUNION: "Reunión",
+  LLAMADA: "Llamada",
+  EMAIL: "Email",
+  EVENTO: "Evento",
+  NOTA: "Nota",
+} as const;
+
+export const COMMITMENT_PARTIES = { NOSOTROS: "Nosotros", SOCIO: "Socio" } as const;
+
+export const COMMITMENT_STATUSES = { PENDIENTE: "Pendiente", CUMPLIDO: "Cumplido", CANCELADO: "Cancelado" } as const;
+
+export const HEALTH_DOT = { VERDE: "bg-emerald-500", AMARILLO: "bg-amber-400", ROJO: "bg-red-500" } as const;

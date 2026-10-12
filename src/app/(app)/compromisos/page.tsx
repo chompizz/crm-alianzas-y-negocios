@@ -1,0 +1,65 @@
+import type { Prisma } from "@prisma/client";
+import { CommitmentRow } from "@/components/commitment-row";
+import { PageHeader } from "@/components/page-header";
+import { db } from "@/lib/db";
+import { startOfTodayUtc } from "@/lib/format";
+import { COMMITMENT_PARTIES } from "@/lib/labels";
+
+export default async function CommitmentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ vista?: string; resp?: string; parte?: string; pais?: string }>;
+}) {
+  const { vista = "pendientes", resp, parte, pais } = await searchParams;
+  const where: Prisma.CommitmentWhereInput = {};
+  if (vista === "pendientes") where.status = "PENDIENTE";
+  if (vista === "vencidos") Object.assign(where, { status: "PENDIENTE", dueDate: { lt: startOfTodayUtc() } });
+  if (resp) where.ownerId = resp;
+  if (parte === "NOSOTROS" || parte === "SOCIO") where.party = parte;
+  if (pais) where.alliance = { countryCode: pais };
+
+  const [commitments, users, countries] = await Promise.all([
+    db.commitment.findMany({
+      where,
+      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
+      include: { owner: { select: { name: true } }, alliance: { select: { id: true, name: true } } },
+    }),
+    db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.country.findMany({ where: { alliances: { some: {} } }, orderBy: { name: "asc" } }),
+  ]);
+
+  return (
+    <>
+      <PageHeader title="Compromisos" subtitle="Lo que cada parte se comprometió a entregar" />
+      <form className="mb-4 flex flex-wrap gap-2">
+        <select name="vista" defaultValue={vista} className="input max-w-[12rem]">
+          <option value="pendientes">Pendientes</option>
+          <option value="vencidos">Vencidos</option>
+          <option value="todos">Todos</option>
+        </select>
+        <select name="parte" defaultValue={parte ?? ""} className="input max-w-[12rem]">
+          <option value="">Ambas partes</option>
+          {Object.entries(COMMITMENT_PARTIES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <select name="resp" defaultValue={resp ?? ""} className="input max-w-[12rem]">
+          <option value="">Todos los responsables</option>
+          {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        <select name="pais" defaultValue={pais ?? ""} className="input max-w-[12rem]">
+          <option value="">Todos los países</option>
+          {countries.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+        </select>
+        <button className="btn-secondary">Filtrar</button>
+      </form>
+      <div className="card overflow-x-auto p-0">
+        <table className="table">
+          <thead><tr><th>Compromiso</th><th>Alianza</th><th>Quién</th><th>Fecha</th><th>Estado</th></tr></thead>
+          <tbody>
+            {commitments.map((c) => <CommitmentRow key={c.id} commitment={c} showAlliance />)}
+            {commitments.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-slate-500">No hay compromisos con estos filtros.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
