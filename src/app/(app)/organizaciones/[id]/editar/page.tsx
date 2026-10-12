@@ -6,9 +6,10 @@ import { OrganizationForm } from "../../organization-form";
 
 export default async function EditOrganizationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [organization, countries] = await Promise.all([
+  const [organization, countries, groups] = await Promise.all([
     db.organization.findUnique({ where: { id }, include: { countries: true } }),
     db.country.findMany({ orderBy: { name: "asc" } }),
+    db.organization.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   if (!organization) notFound();
   return (
@@ -17,6 +18,7 @@ export default async function EditOrganizationPage({ params }: { params: Promise
       <OrganizationForm
         action={updateOrganization.bind(null, id)}
         countries={countries}
+        groups={groups}
         organization={organization}
         cancelHref={`/organizaciones/${id}`}
       />

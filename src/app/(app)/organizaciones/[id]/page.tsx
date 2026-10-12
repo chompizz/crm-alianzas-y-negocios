@@ -2,12 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
-import { ALLIANCE_STAGES, HEALTH_DOT, ORGANIZATION_TYPES, RELATIONSHIP_LEVELS } from "@/lib/labels";
+import { OfferingsSection } from "@/components/offerings-section";
+import { ALLIANCE_STAGES, HEALTH_DOT, ORGANIZATION_TYPES, PARTICIPANT_ROLES, RELATIONSHIP_LEVELS } from "@/lib/labels";
 import { deleteOrganization } from "../actions";
 
 export default async function OrganizationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const org = await db.organization.findUnique({
+  const [org, catalog] = await Promise.all([db.organization.findUnique({
     where: { id },
     include: {
       countries: { orderBy: { name: "asc" } },
@@ -16,8 +17,13 @@ export default async function OrganizationPage({ params }: { params: Promise<{ i
         include: { alliance: { include: { country: true } } },
         orderBy: { alliance: { country: { name: "asc" } } },
       },
+      parent: { select: { id: true, name: true } },
+      subsidiaries: { select: { id: true, name: true, type: true }, orderBy: { name: "asc" } },
+      offerings: { select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } },
     },
-  });
+  }),
+  db.offering.findMany({ select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } }),
+  ]);
   if (!org) notFound();
 
   return (
@@ -37,6 +43,27 @@ export default async function OrganizationPage({ params }: { params: Promise<{ i
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="card space-y-3 lg:col-span-1">
           <h2 className="font-semibold">Ficha</h2>
+          <div>
+            <p className="text-xs uppercase text-slate-500">Grupo</p>
+            {org.parent ? (
+              <p className="mt-1 text-sm">
+                Filial de{" "}
+                <Link href={`/organizaciones/${org.parent.id}`} className="font-medium text-indigo-700 hover:underline">{org.parent.name}</Link>
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-slate-400">{org.subsidiaries.length ? "Casa matriz" : "Independiente"}</p>
+            )}
+          </div>
+          {org.subsidiaries.length > 0 && (
+            <div>
+              <p className="text-xs uppercase text-slate-500">Filiales ({org.subsidiaries.length})</p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {org.subsidiaries.map((s) => (
+                  <Link key={s.id} href={`/organizaciones/${s.id}`} className="chip hover:text-indigo-700">{s.name}</Link>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <p className="text-xs uppercase text-slate-500">Países</p>
             <div className="mt-1 flex flex-wrap gap-1">
@@ -86,6 +113,17 @@ export default async function OrganizationPage({ params }: { params: Promise<{ i
           </table>
         </section>
 
+        <div className="lg:col-span-3">
+          <OfferingsSection
+            target="organizacion"
+            targetId={id}
+            assigned={org.offerings}
+            available={catalog}
+            title="Productos y servicios"
+            hint="Lo que esta organización ofrece o aporta. Se elige del catálogo o se crea al vuelo."
+          />
+        </div>
+
         <section className="card lg:col-span-3">
           <h2 className="mb-3 font-semibold">Alianzas en las que participa</h2>
           <table className="table">
@@ -98,7 +136,10 @@ export default async function OrganizationPage({ params }: { params: Promise<{ i
                     <Link href={`/alianzas/${p.allianceId}`} className="font-medium text-indigo-700 hover:underline">{p.alliance.name}</Link>
                   </td>
                   <td>{p.alliance.country.name}</td>
-                  <td>{p.role}</td>
+                  <td>
+                    {PARTICIPANT_ROLES[p.roleType]}
+                    {p.role && <span className="block text-xs text-slate-500">{p.role}</span>}
+                  </td>
                   <td>{ALLIANCE_STAGES[p.alliance.stage]}</td>
                 </tr>
               ))}

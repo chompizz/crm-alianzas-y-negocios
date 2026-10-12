@@ -8,9 +8,10 @@ type Props = {
   countries: Country[];
   organization?: Organization & { countries: Country[] };
   cancelHref: string;
+  groups: { id: string; name: string }[];
 };
 
-export function OrganizationForm({ action, countries, organization, cancelHref }: Props) {
+export function OrganizationForm({ action, countries, organization, cancelHref, groups }: Props) {
   return (
     <form action={action} className="card max-w-3xl space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -33,6 +34,17 @@ export function OrganizationForm({ action, countries, organization, cancelHref }
         <label>
           <span className="label">Sitio web</span>
           <input name="website" defaultValue={organization?.website ?? ""} className="input" placeholder="https://" />
+        </label>
+        <label className="sm:col-span-2">
+          <span className="label">Pertenece al grupo</span>
+          <select name="parentId" defaultValue={organization?.parentId ?? ""} className="input">
+            <option value="">— Ninguno (independiente o casa matriz) —</option>
+            {groups
+              .filter((g) => g.id !== organization?.id)
+              .map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+          </select>
         </label>
       </div>
       <div>

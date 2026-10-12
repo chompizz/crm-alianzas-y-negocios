@@ -17,7 +17,9 @@ import {
   DIMENSIONS,
   HEALTH,
   INTERACTION_TYPES,
+  OFFERING_KINDS,
   ORGANIZATION_TYPES,
+  PARTICIPANT_ROLES,
   ROLES,
 } from "@/lib/labels";
 
@@ -42,7 +44,9 @@ function buildServer(user: User) {
     {
       instructions:
         "Nexo es el CRM interno de alianzas, estrategia y negocios del equipo. Cada alianza pertenece a un país; " +
-        "una organización puede operar en varios países. Usá las herramientas de lectura antes de crear registros " +
+        "una organización puede operar en varios países y pertenecer a un grupo (casa matriz con filiales). Cada organización participa en una alianza con un rol " +
+        "(líder, socio, proveedor, cliente, canal, integrador, financiador, institucional u otro). El catálogo guarda productos, servicios y otros, " +
+        "que se asignan a organizaciones (lo que ofrecen) y a alianzas (lo que se vende o entrega). Usá las herramientas de lectura antes de crear registros " +
         "para no duplicar, y confirmá con la persona antes de crear o modificar datos. Fechas en formato AAAA-MM-DD. " +
         "El trabajo se organiza en cuatro dimensiones: Gobernanza, Estrategia, Producto y Ventas; alianzas, iniciativas y oportunidades pertenecen a una.",
     },
@@ -210,6 +214,9 @@ function buildServer(user: User) {
           countries: true,
           contacts: { include: { country: true } },
           participations: { include: { alliance: { include: { country: true } } } },
+          parent: { select: { id: true, name: true } },
+          subsidiaries: { select: { id: true, name: true } },
+          offerings: true,
         },
       });
       if (!o) return fail("No existe esa organización.");
@@ -222,12 +229,16 @@ function buildServer(user: User) {
         descripcion: o.description,
         capacidades: o.capabilities,
         paises: o.countries.map((c) => c.name),
+        grupo: o.parent ? { id: o.parent.id, nombre: o.parent.name } : null,
+        filiales: o.subsidiaries.map((f) => ({ id: f.id, nombre: f.name })),
+        ofertas: o.offerings.map((f) => ({ id: f.id, nombre: f.name, tipo: OFFERING_KINDS[f.kind] })),
         contactos: o.contacts.map((c) => ({ id: c.id, nombre: c.name, cargo: c.position, email: c.email, pais: c.country?.name })),
         alianzas: o.participations.map((p) => ({
           id: p.allianceId,
           nombre: p.alliance.name,
           pais: p.alliance.country.name,
-          rol: p.role,
+          rol: PARTICIPANT_ROLES[p.roleType],
+          detalleRol: p.role,
           etapa: ALLIANCE_STAGES[p.alliance.stage],
         })),
       });
@@ -333,6 +344,7 @@ function buildServer(user: User) {
           commitments: { orderBy: { dueDate: "asc" }, include: { owner: { select: { name: true } } } },
           opportunities: true,
           initiatives: { select: { id: true, name: true, progress: true } },
+          offerings: true,
         },
       });
       if (!a) return fail("No existe esa alianza.");
@@ -349,7 +361,13 @@ function buildServer(user: User) {
         valorEsperadoUSD: a.expectedValue ? Number(a.expectedValue) : null,
         inicio: day(a.startDate),
         renovacion: day(a.renewalDate),
-        participantes: a.participants.map((p) => ({ id: p.organization.id, nombre: p.organization.name, rol: p.role })),
+        participantes: a.participants.map((p) => ({
+          id: p.organization.id,
+          nombre: p.organization.name,
+          rol: PARTICIPANT_ROLES[p.roleType],
+          detalleRol: p.role,
+        })),
+        ofertas: a.offerings.map((f) => ({ id: f.id, nombre: f.name, tipo: OFFERING_KINDS[f.kind] })),
         ultimasInteracciones: a.interactions.map((i) => ({
           fecha: day(i.date),
           tipo: INTERACTION_TYPES[i.type],
@@ -660,6 +678,173 @@ function buildServer(user: User) {
       if (!(await db.user.findUnique({ where: { id: usuarioId } }))) return fail("No existe ese usuario.");
       await db.user.delete({ where: { id: usuarioId } });
       return json({ eliminado: true, id: usuarioId });
+    },
+  );
+
+  server.registerTool(
+    "agregar_participante",
+    {
+      title: "Agregar participante a una alianza",
+      description: "Suma una organización a una alianza con su rol, o actualiza el rol si ya participa.",
+      inputSchema: {
+        alianzaId: z.string(),
+        organizacionId: z.string(),
+        rol: z.enum(keys(PARTICIPANT_ROLES)).optional().describe("Por defecto SOCIO"),
+        detalle: z.string().optional().describe("Detalle libre del rol, p. ej. 'aporta la tecnología'"),
+      },
+    },
+    async ({ alianzaId, organizacionId, rol, detalle }) => {
+      const [a, o] = await Promise.all([
+        db.alliance.findUnique({ where: { id: alianzaId }, select: { id: true } }),
+        db.organization.findUnique({ where: { id: organizacionId }, select: { id: true } }),
+      ]);
+      if (!a) return fail("No existe esa alianza.");
+      if (!o) return fail("No existe esa organización.");
+      const roleType = rol ?? "SOCIO";
+      await db.allianceParticipant.upsert({
+        where: { allianceId_organizationId: { allianceId: alianzaId, organizationId: organizacionId } },
+        update: { roleType, role: detalle },
+        create: { allianceId: alianzaId, organizationId: organizacionId, roleType, role: detalle },
+      });
+      return json({ ok: true, rol: PARTICIPANT_ROLES[roleType], detalle: detalle ?? null });
+    },
+  );
+
+  server.registerTool(
+    "quitar_participante",
+    {
+      title: "Quitar participante de una alianza",
+      description: "Saca una organización de una alianza.",
+      inputSchema: { alianzaId: z.string(), organizacionId: z.string() },
+    },
+    async ({ alianzaId, organizacionId }) => {
+      const r = await db.allianceParticipant.deleteMany({ where: { allianceId: alianzaId, organizationId: organizacionId } });
+      return r.count ? json({ ok: true }) : fail("Esa organización no participa en esa alianza.");
+    },
+  );
+
+  server.registerTool(
+    "asignar_grupo",
+    {
+      title: "Asignar grupo a una organización",
+      description: "Marca una organización como filial de otra (su casa matriz). Pasá grupoId null para dejarla independiente.",
+      inputSchema: { organizacionId: z.string(), grupoId: z.string().nullable() },
+    },
+    async ({ organizacionId, grupoId }) => {
+      const o = await db.organization.findUnique({ where: { id: organizacionId }, select: { id: true } });
+      if (!o) return fail("No existe esa organización.");
+      if (grupoId) {
+        // Evita ciclos: el grupo no puede ser la misma organización ni una de sus filiales.
+        let current: string | null = grupoId;
+        for (let i = 0; current && i < 50; i++) {
+          if (current === organizacionId) return fail("Ese grupo es la misma organización o una de sus filiales.");
+          const next: { parentId: string | null } | null = await db.organization.findUnique({
+            where: { id: current },
+            select: { parentId: true },
+          });
+          if (!next && i === 0) return fail("No existe la organización grupo.");
+          current = next?.parentId ?? null;
+        }
+      }
+      const updated = await db.organization.update({
+        where: { id: organizacionId },
+        data: { parentId: grupoId },
+        include: { parent: { select: { name: true } } },
+      });
+      return json({ ok: true, organizacion: updated.name, grupo: updated.parent?.name ?? null });
+    },
+  );
+
+  server.registerTool(
+    "listar_catalogo",
+    {
+      title: "Listar catálogo",
+      description: "Productos, servicios y otros del catálogo, con las organizaciones y alianzas a las que están asignados.",
+      inputSchema: {
+        tipo: z.enum(keys(OFFERING_KINDS)).optional(),
+        texto: z.string().optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ tipo, texto }) => {
+      const items = await db.offering.findMany({
+        where: {
+          ...(tipo ? { kind: tipo } : {}),
+          ...(texto ? { name: { contains: texto, mode: "insensitive" } } : {}),
+        },
+        orderBy: { name: "asc" },
+        include: {
+          organizations: { select: { id: true, name: true } },
+          alliances: { select: { id: true, name: true } },
+        },
+      });
+      return json(
+        items.map((f) => ({
+          id: f.id,
+          nombre: f.name,
+          tipo: OFFERING_KINDS[f.kind],
+          descripcion: f.description,
+          organizaciones: f.organizations.map((o) => ({ id: o.id, nombre: o.name })),
+          alianzas: f.alliances.map((a) => ({ id: a.id, nombre: a.name })),
+        })),
+      );
+    },
+  );
+
+  server.registerTool(
+    "crear_oferta",
+    {
+      title: "Crear producto, servicio u otro",
+      description: "Agrega un ítem al catálogo y, opcionalmente, lo asigna a organizaciones y alianzas. Revisá listar_catalogo antes para no duplicar.",
+      inputSchema: {
+        nombre: z.string(),
+        tipo: z.enum(keys(OFFERING_KINDS)).describe("PRODUCTO, SERVICIO u OTRO"),
+        descripcion: z.string().optional(),
+        organizacionIds: z.array(z.string()).optional(),
+        alianzaIds: z.array(z.string()).optional(),
+      },
+    },
+    async ({ nombre, tipo, descripcion, organizacionIds = [], alianzaIds = [] }) => {
+      const f = await db.offering.create({
+        data: {
+          name: nombre.trim(),
+          kind: tipo,
+          description: descripcion,
+          organizations: { connect: organizacionIds.map((id) => ({ id })) },
+          alliances: { connect: alianzaIds.map((id) => ({ id })) },
+        },
+      });
+      return json({ creada: true, id: f.id, nombre: f.name, tipo: OFFERING_KINDS[f.kind] });
+    },
+  );
+
+  server.registerTool(
+    "asignar_oferta",
+    {
+      title: "Asignar o quitar un producto/servicio",
+      description: "Asigna un ítem del catálogo a una organización o a una alianza (indicá una de las dos). Con quitar=true lo desasigna.",
+      inputSchema: {
+        ofertaId: z.string(),
+        organizacionId: z.string().optional(),
+        alianzaId: z.string().optional(),
+        quitar: z.boolean().optional(),
+      },
+    },
+    async ({ ofertaId, organizacionId, alianzaId, quitar }) => {
+      if (!organizacionId === !alianzaId) return fail("Indicá organizacionId o alianzaId (uno solo).");
+      const f = await db.offering.findUnique({ where: { id: ofertaId }, select: { id: true } });
+      if (!f) return fail("No existe ese ítem del catálogo.");
+      const op = quitar ? "disconnect" : "connect";
+      try {
+        if (organizacionId) {
+          await db.organization.update({ where: { id: organizacionId }, data: { offerings: { [op]: { id: ofertaId } } } });
+        } else {
+          await db.alliance.update({ where: { id: alianzaId! }, data: { offerings: { [op]: { id: ofertaId } } } });
+        }
+      } catch {
+        return fail(organizacionId ? "No existe esa organización." : "No existe esa alianza.");
+      }
+      return json({ ok: true, accion: quitar ? "quitada" : "asignada" });
     },
   );
 
