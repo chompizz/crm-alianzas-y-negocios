@@ -29,10 +29,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               {item.label}
             </NavLink>
           ))}
+          <NavLink href="/perfil">Conectar con Claude</NavLink>
           {isAdmin && <NavLink href="/usuarios">Usuarios</NavLink>}
         </nav>
         <div className="hidden border-t border-slate-100 px-5 py-4 text-sm md:block">
-          <p className="truncate font-medium text-slate-700">{session?.user?.name}</p>
+          <Link href="/perfil" className="block truncate font-medium text-slate-700 hover:text-indigo-700">{session?.user?.name}</Link>
           <p className="truncate text-xs text-slate-500">{session?.user?.email}</p>
           <form
             action={async () => {
