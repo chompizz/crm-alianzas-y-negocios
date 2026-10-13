@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export function PartnerTabs({ active, pending }: { active: "registros" | "cuentas"; pending: number }) {
+export function PartnerTabs({ active, pending }: { active: "registros" | "partners" | "cuentas"; pending: number }) {
   const tab = (key: typeof active, href: string, label: React.ReactNode) => (
     <Link
       href={href}
@@ -12,6 +12,7 @@ export function PartnerTabs({ active, pending }: { active: "registros" | "cuenta
   return (
     <div className="mb-4 flex gap-1">
       {tab("registros", "/partners", <>Registros {pending > 0 && <span className="chip ml-1 border-amber-400/40 bg-amber-500/10 text-amber-300">{pending}</span>}</>)}
+      {tab("partners", "/partners/listado", "Partners")}
       {tab("cuentas", "/partners/cuentas", "Cuentas")}
     </div>
   );

@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import type { OpportunityStatus, RegistrationStatus } from "@prisma/client";
+import type { OpportunityStatus, ParticipantRole, RegistrationStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notify } from "@/lib/notify";
 
@@ -36,7 +36,7 @@ export function partnerAlliances(organizationId: string) {
 // Organizaciones que pueden tener cuentas de partner: las que participan en alguna alianza.
 export function partnerOrganizations() {
   return db.organization.findMany({
-    where: { participations: { some: {} } },
+    where: partnerWhere,
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
@@ -245,4 +245,79 @@ export async function updatePartnerAccount(id: string, input: AccountInput) {
 export async function deletePartnerAccount(id: string) {
   await partnerAccount(id);
   await db.user.delete({ where: { id } });
+}
+
+// ---------- ABM de partners ----------
+// Un partner es una organización que participa en alianzas (con un rol distinto de cliente) o tiene cuentas de portal.
+
+export const partnerWhere = {
+  OR: [{ participations: { some: { roleType: { not: "CLIENTE" as const } } } }, { partnerAccounts: { some: {} } }],
+};
+
+export function listPartners() {
+  return db.organization.findMany({
+    where: partnerWhere,
+    orderBy: { name: "asc" },
+    include: {
+      countries: { select: { code: true, name: true } },
+      participations: {
+        where: { roleType: { not: "CLIENTE" } },
+        include: { alliance: { select: { id: true, name: true } } },
+        orderBy: { alliance: { name: "asc" } },
+      },
+      partnerAccounts: { select: { id: true, active: true } },
+      _count: { select: { partnerRegistrations: true, partnerOpportunities: true } },
+    },
+  });
+}
+
+export type PartnerInput = {
+  organizationId?: string | null;
+  newName?: string | null;
+  countries?: string[];
+  alliances: { allianceId: string; roleType?: ParticipantRole | null }[];
+};
+
+// Alta (organización existente o nueva) y modificación: las alianzas pasadas reemplazan las del partner.
+export async function savePartner(input: PartnerInput) {
+  let organizationId = input.organizationId || null;
+  const name = input.newName?.trim();
+  if (!organizationId && name) {
+    const existing = await db.organization.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { id: true } });
+    organizationId =
+      existing?.id ??
+      (
+        await db.organization.create({
+          data: { name, countries: input.countries?.length ? { connect: input.countries.map((code) => ({ code })) } : undefined },
+        })
+      ).id;
+  }
+  if (!organizationId) throw new Error("Elegí o escribí la organización");
+  if (!input.alliances.length) throw new Error("Elegí al menos una alianza");
+  const ids = input.alliances.map((a) => a.allianceId);
+  if ((await db.alliance.count({ where: { id: { in: ids } } })) !== new Set(ids).size) throw new Error("Alguna alianza no existe");
+
+  await db.$transaction([
+    db.allianceParticipant.deleteMany({ where: { organizationId, roleType: { not: "CLIENTE" }, allianceId: { notIn: ids } } }),
+    ...input.alliances.map((a) =>
+      db.allianceParticipant.upsert({
+        where: { allianceId_organizationId: { allianceId: a.allianceId, organizationId: organizationId! } },
+        update: { roleType: a.roleType ?? "SOCIO" },
+        create: { allianceId: a.allianceId, organizationId: organizationId!, roleType: a.roleType ?? "SOCIO" },
+      }),
+    ),
+  ]);
+  return db.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { id: true, name: true } });
+}
+
+// Baja: deja de ser partner (sale de las alianzas y se borran sus cuentas de portal).
+// La organización, sus registros y las oportunidades que trajo se conservan.
+export async function removePartner(organizationId: string) {
+  const org = await db.organization.findUnique({ where: { id: organizationId }, select: { name: true } });
+  if (!org) throw new Error("No existe ese partner");
+  await db.$transaction([
+    db.allianceParticipant.deleteMany({ where: { organizationId, roleType: { not: "CLIENTE" } } }),
+    db.user.deleteMany({ where: { organizationId, role: "PARTNER" } }),
+  ]);
+  return org;
 }

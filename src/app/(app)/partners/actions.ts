@@ -4,13 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
-import { str } from "@/lib/forms";
+import { all, oneOf, str } from "@/lib/forms";
+import { PARTICIPANT_ROLES } from "@/lib/labels";
 import {
   approveRegistration,
   createPartnerAccount,
   deletePartnerAccount,
   rejectRegistration,
+  removePartner,
+  savePartner,
   updatePartnerAccount,
+  type PartnerInput,
 } from "@/lib/partners";
 
 const message = (e: unknown) => encodeURIComponent(e instanceof Error ? e.message : "No se pudo guardar");
@@ -107,4 +111,50 @@ export async function deleteAccount(id: string) {
   await requireAdmin();
   await deletePartnerAccount(id);
   revalidatePath("/partners/cuentas");
+}
+
+// ---------- ABM de partners (cualquier persona del equipo; la cuenta inicial solo un admin) ----------
+
+function readPartner(fd: FormData): PartnerInput {
+  return {
+    organizationId: str(fd, "organizationId"),
+    newName: str(fd, "newName"),
+    countries: all(fd, "countries"),
+    alliances: all(fd, "alliances").map((allianceId) => ({ allianceId, roleType: oneOf(fd, `role_${allianceId}`, PARTICIPANT_ROLES, "SOCIO") })),
+  };
+}
+
+export async function createPartner(fd: FormData) {
+  const user = await requireUser();
+  let id: string;
+  try {
+    const org = await savePartner(readPartner(fd));
+    id = org.id;
+    if (user.role === "ADMIN" && str(fd, "accountEmail")) {
+      await createPartnerAccount({ organizationId: id, name: str(fd, "accountName"), email: str(fd, "accountEmail"), password: str(fd, "accountPassword") });
+    }
+  } catch (e) {
+    redirect(`/partners/listado/nuevo?error=${message(e)}`);
+  }
+  revalidatePath("/partners", "layout");
+  redirect("/partners/listado?ok=creado");
+}
+
+export async function updatePartner(id: string, fd: FormData) {
+  await requireUser();
+  try {
+    await savePartner({ ...readPartner(fd), organizationId: id, newName: null });
+    const name = str(fd, "name");
+    if (name) await db.organization.update({ where: { id }, data: { name } });
+  } catch (e) {
+    redirect(`/partners/listado/${id}/editar?error=${message(e)}`);
+  }
+  revalidatePath("/partners", "layout");
+  redirect("/partners/listado?ok=guardado");
+}
+
+export async function deletePartner(id: string) {
+  await requireUser();
+  await removePartner(id);
+  revalidatePath("/partners", "layout");
 }

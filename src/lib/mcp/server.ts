@@ -15,7 +15,10 @@ import {
   deletePartnerAccount,
   partnerAccount,
   registrationStage,
+  listPartners,
   rejectRegistration,
+  removePartner,
+  savePartner,
   updatePartnerAccount,
 } from "@/lib/partners";
 import { db, INTERNAL_USERS } from "@/lib/db";
@@ -1726,6 +1729,82 @@ function buildServer(user: User) {
         return json({ eliminada: true, id: cuentaId, nombre: u.name });
       } catch (e) {
         return fail(e instanceof Error ? e.message : "No se pudo eliminar la cuenta.");
+      }
+    },
+  );
+
+  server.registerTool(
+    "listar_partners",
+    {
+      title: "Listar partners",
+      description: "Organizaciones partner: las alianzas en las que participan (con su rol), cuántas cuentas de portal tienen y cuántas oportunidades registraron o trajeron.",
+      annotations: { readOnlyHint: true },
+    },
+    async () =>
+      json(
+        (await listPartners()).map((p) => ({
+          id: p.id,
+          nombre: p.name,
+          paises: p.countries.map((c) => c.name),
+          alianzas: p.participations.map((x) => ({ id: x.alliance.id, nombre: x.alliance.name, rol: PARTICIPANT_ROLES[x.roleType] })),
+          cuentasActivas: p.partnerAccounts.filter((a) => a.active).length,
+          cuentasDesactivadas: p.partnerAccounts.filter((a) => !a.active).length,
+          registros: p._count.partnerRegistrations,
+          oportunidadesTraidas: p._count.partnerOpportunities,
+        })),
+      ),
+  );
+
+  server.registerTool(
+    "guardar_partner",
+    {
+      title: "Dar de alta o modificar un partner",
+      description:
+        "Alta: pasá organizacionId (existente) o nombreNuevo, y las alianzas en las que participa. Modificación: pasá organizacionId y la lista completa de alianzas, " +
+        "que reemplaza a la actual (no toca a la organización cuando es cliente). El partner solo ve esas alianzas en su portal. Confirmá con la persona antes.",
+      inputSchema: {
+        organizacionId: z.string().optional(),
+        nombreNuevo: z.string().optional(),
+        paises: z.array(z.string()).optional().describe("Códigos ISO, solo si se crea la organización"),
+        alianzas: z
+          .array(z.object({ alianzaId: z.string(), rol: z.enum(keys(PARTICIPANT_ROLES)).optional().describe("Por defecto SOCIO") }))
+          .min(1),
+      },
+    },
+    async ({ organizacionId, nombreNuevo, paises, alianzas }) => {
+      if (!organizacionId === !nombreNuevo) return fail("Indicá organizacionId o nombreNuevo (uno solo).");
+      if (alianzas.some((a) => a.rol === "CLIENTE")) return fail("Para clientes usá agregar_cliente.");
+      if (organizacionId && !(await db.organization.findUnique({ where: { id: organizacionId }, select: { id: true } }))) return fail("No existe esa organización.");
+      try {
+        const org = await savePartner({
+          organizationId: organizacionId,
+          newName: nombreNuevo,
+          countries: paises,
+          alliances: alianzas.map((a) => ({ allianceId: a.alianzaId, roleType: a.rol })),
+        });
+        return json({ guardado: true, id: org.id, nombre: org.name, alianzas: alianzas.length });
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : "No se pudo guardar el partner.");
+      }
+    },
+  );
+
+  server.registerTool(
+    "baja_partner",
+    {
+      title: "Dar de baja un partner",
+      description:
+        "Deja de ser partner: sale de todas sus alianzas (salvo donde es cliente) y se borran sus cuentas del portal. " +
+        "La organización, sus registros y las oportunidades que trajo se conservan. Confirmá con la persona antes.",
+      inputSchema: { organizacionId: z.string() },
+      annotations: { destructiveHint: true },
+    },
+    async ({ organizacionId }) => {
+      try {
+        const org = await removePartner(organizacionId);
+        return json({ baja: true, id: organizacionId, nombre: org.name });
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : "No se pudo dar de baja.");
       }
     },
   );
