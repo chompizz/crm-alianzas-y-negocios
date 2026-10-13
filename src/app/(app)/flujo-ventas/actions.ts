@@ -14,7 +14,7 @@ function refresh() {
 }
 
 export async function initiativeToOpportunity(fd: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const probability = str(fd, "probability");
   await convertInitiative({
     initiativeId: str(fd, "initiativeId")!,
@@ -22,12 +22,12 @@ export async function initiativeToOpportunity(fd: FormData) {
     title: str(fd, "title"),
     value: money(str(fd, "value")),
     probability: probability ? Math.max(0, Math.min(100, Number(probability))) : null,
-  });
+  }, user);
   refresh();
 }
 
 export async function opportunityToClient(fd: FormData) {
-  await requireUser();
+  const user = await requireUser();
   await convertOpportunity({
     opportunityId: str(fd, "opportunityId")!,
     organizationId: str(fd, "organizationId"),
@@ -35,6 +35,6 @@ export async function opportunityToClient(fd: FormData) {
     status: oneOf(fd, "status", CLIENT_STATUSES, "ACTIVO"),
     revenue: money(str(fd, "revenue")),
     since: parseDate(str(fd, "since")),
-  });
+  }, user);
   refresh();
 }

@@ -15,12 +15,14 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  role         Role     @default(MEMBER)
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  name               String
+  passwordHash       String
+  role               Role     @default(MEMBER)
+  // Avisos por email cuando otra persona cambia algo de lo que es responsable.
+  emailNotifications Boolean  @default(true)
+  createdAt          DateTime @default(now())
 
   alliances    Alliance[]    @relation("AllianceOwner")
   initiatives  Initiative[]  @relation("InitiativeOwner")
@@ -174,9 +176,9 @@ model Alliance {
 
 model AllianceParticipant {
   allianceId     String
-  alliance       Alliance     @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  alliance       Alliance        @relation(fields: [allianceId], references: [id], onDelete: Cascade)
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   roleType       ParticipantRole @default(SOCIO)
   role           String? // detalle libre del rol
 
@@ -186,20 +188,20 @@ model AllianceParticipant {
 // Clientes que atiende una alianza: una alianza puede tener muchos clientes y una
 // organización puede ser cliente de varias alianzas.
 model AllianceClient {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   allianceId     String
-  alliance       Alliance      @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  alliance       Alliance     @relation(fields: [allianceId], references: [id], onDelete: Cascade)
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  status         ClientStatus  @default(PROSPECTO)
-  revenue        Decimal?      @db.Decimal(14, 2) // facturación anual estimada, USD
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  status         ClientStatus @default(PROSPECTO)
+  revenue        Decimal?     @db.Decimal(14, 2) // facturación anual estimada, USD
   since          DateTime?
   notes          String?
   offerings      Offering[] // lo que compra
-  opportunityId  String?       @unique // oportunidad ganada que lo originó
-  opportunity    Opportunity?  @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  opportunityId  String?      @unique // oportunidad ganada que lo originó
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([allianceId, organizationId])
 }
@@ -232,15 +234,15 @@ enum OfferingKind {
 
 // Productos, servicios u otros que ofrecen las organizaciones y que se comercializan o integran en las alianzas.
 model Offering {
-  id            String         @id @default(cuid())
+  id            String           @id @default(cuid())
   name          String
-  kind          OfferingKind   @default(PRODUCTO)
+  kind          OfferingKind     @default(PRODUCTO)
   description   String?
   organizations Organization[]
   alliances     Alliance[]
   clients       AllianceClient[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 }
 
 enum OpportunityStatus {

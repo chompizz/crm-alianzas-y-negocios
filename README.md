@@ -55,6 +55,20 @@ Nexo incluye un conector MCP para usarlo desde Claude: consultar el portafolio, 
 
 La dirección incluye el token, así que hay que tratarla como una contraseña. Para clientes que permiten cabeceras también funciona `POST /api/mcp` con `Authorization: Bearer <token>`.
 
+## Avisos por email
+
+Cuando alguien cambia una alianza, iniciativa, compromiso, cliente u oportunidad, los demás responsables reciben un email. Los cambios seguidos se juntan en un solo email por persona (un minuto de espera), y quien hizo el cambio no recibe aviso. Cada persona puede apagarlos desde **Mi perfil** o pidiéndoselo a Claude.
+
+Los emails salen por [Resend](https://resend.com). En Railway agregar:
+
+| Variable | Valor |
+| --- | --- |
+| `RESEND_API_KEY` | la clave de API de Resend |
+| `EMAIL_FROM` | el remitente, de un dominio verificado en Resend, p. ej. `Nexo <avisos@tudominio.com>` |
+| `APP_URL` | la dirección pública de Nexo, para los enlaces |
+
+Sin `RESEND_API_KEY` o `EMAIL_FROM` no se envía nada y los avisos quedan en los logs como `[avisos] sin enviar`.
+
 ## Stack
 
 Next.js 15 (App Router, server actions) · TypeScript · Tailwind CSS · PostgreSQL + Prisma · Auth.js (email y contraseña).

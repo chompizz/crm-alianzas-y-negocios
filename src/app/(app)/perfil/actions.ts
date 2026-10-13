@@ -26,3 +26,9 @@ export async function revokeToken(id: string) {
   await db.apiToken.updateMany({ where: { id, userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } });
   revalidatePath("/perfil");
 }
+
+export async function setEmailNotifications(fd: FormData) {
+  const user = await requireUser();
+  await db.user.update({ where: { id: user.id }, data: { emailNotifications: fd.get("enabled") === "on" } });
+  revalidatePath("/perfil");
+}
