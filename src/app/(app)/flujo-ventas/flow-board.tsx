@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { CLIENT_STATUSES } from "@/lib/labels";
+import { RowActions } from "@/components/row-actions";
+import { removeClient } from "../alianzas/actions";
+import { deleteInitiative } from "../iniciativas/actions";
+import { deleteOpportunity } from "../oportunidades/actions";
 import { initiativeToOpportunity, opportunityToClient } from "./actions";
 
-type Card = { id: string; title: string; detail: string; meta: string; badge: string; href?: string };
+type Card = { id: string; title: string; detail: string; meta: string; badge: string; href?: string; allianceId?: string };
 type Initiative = Card & { allianceIds: string[] };
 type Opportunity = Card & { value: string };
 type Option = { id: string; name: string };
@@ -94,8 +98,8 @@ export function FlowBoard({
               <p className="mb-3 px-1 text-xs text-slate-500">{col.hint}</p>
               <div className="space-y-2">
                 {items[col.key].map((c) => (
+                  <div key={c.id} className="relative">
                   <Link
-                    key={c.id}
                     href={hrefFor(col.key, c)}
                     draggable={col.key !== "CLIENTES"}
                     onDragStart={(e) => {
@@ -107,7 +111,7 @@ export function FlowBoard({
                       setDragging(null);
                       setOver(null);
                     }}
-                    className={`block rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-indigo-300 ${
+                    className={`block rounded-lg border border-slate-200 bg-white p-3 pb-9 shadow-sm transition hover:border-indigo-300 ${
                       col.key !== "CLIENTES" ? "cursor-grab active:cursor-grabbing" : ""
                     } ${dragging?.id === c.id ? "opacity-40" : ""}`}
                   >
@@ -118,6 +122,8 @@ export function FlowBoard({
                       {c.badge && <span className="truncate text-slate-400">{c.badge}</span>}
                     </div>
                   </Link>
+                  <CardActions col={col.key} card={c} />
+                  </div>
                 ))}
                 {items[col.key].length === 0 && <p className="px-1 py-6 text-center text-sm text-slate-400">Vacío</p>}
               </div>
@@ -222,4 +228,27 @@ function ToClient({ item, organizations }: { item: Opportunity; organizations: O
       </label>
     </>
   );
+}
+
+// Lápiz y X de cada tarjeta, según la columna.
+function CardActions({ col, card: c }: { col: Column; card: Card }) {
+  const props =
+    col === "INICIATIVAS"
+      ? {
+          editHref: `/iniciativas/${c.id}/editar`,
+          deleteAction: deleteInitiative.bind(null, c.id, "/flujo-ventas"),
+          confirm: `¿Eliminar la iniciativa "${c.title}"? Se borran también sus hitos y compromisos.`,
+        }
+      : col === "OPORTUNIDADES"
+        ? {
+            editHref: `/oportunidades/${c.id}/editar`,
+            deleteAction: deleteOpportunity.bind(null, c.id, "/flujo-ventas"),
+            confirm: `¿Eliminar la oportunidad "${c.title}"?`,
+          }
+        : {
+            editHref: `/alianzas/${c.allianceId}?cliente=${c.id}#clientes`,
+            deleteAction: removeClient.bind(null, c.allianceId!, c.id),
+            confirm: `¿Quitar a ${c.title} de los clientes de ${c.detail}? La organización no se borra.`,
+          };
+  return <RowActions className="absolute bottom-1.5 right-1.5" label={c.title} {...props} />;
 }

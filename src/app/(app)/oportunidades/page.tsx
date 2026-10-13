@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { Dimension, OpportunityStatus, Prisma } from "@prisma/client";
 import { DimensionBadge } from "@/components/dimension-badge";
 import { PageHeader } from "@/components/page-header";
+import { RowActions } from "@/components/row-actions";
+import { deleteOpportunity } from "./actions";
 import { db } from "@/lib/db";
 import { fmtUsd } from "@/lib/format";
 import { DIMENSIONS, OPPORTUNITY_STATUSES } from "@/lib/labels";
@@ -56,7 +58,7 @@ export default async function OpportunitiesPage({
       </div>
       <div className="card overflow-x-auto p-0">
         <table className="table">
-          <thead><tr><th>Oportunidad</th><th>Dimensión</th><th>Alianza</th><th>País</th><th className="text-right">Valor</th><th className="text-right">Prob.</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Oportunidad</th><th>Dimensión</th><th>Alianza</th><th>País</th><th className="text-right">Valor</th><th className="text-right">Prob.</th><th>Estado</th><th></th></tr></thead>
           <tbody>
             {opportunities.map((o) => (
               <tr key={o.id} className="hover:bg-slate-50">
@@ -67,9 +69,17 @@ export default async function OpportunitiesPage({
                 <td className="text-right">{fmtUsd(o.estimatedValue)}</td>
                 <td className="text-right">{o.probability != null ? `${o.probability}%` : ""}</td>
                 <td>{OPPORTUNITY_STATUSES[o.status]}</td>
+                <td>
+                  <RowActions
+                    editHref={`/oportunidades/${o.id}/editar`}
+                    deleteAction={deleteOpportunity.bind(null, o.id, "/oportunidades")}
+                    confirm={`¿Eliminar la oportunidad "${o.title}"?`}
+                    label={o.title}
+                  />
+                </td>
               </tr>
             ))}
-            {opportunities.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-slate-500">No hay oportunidades con estos filtros.</td></tr>}
+            {opportunities.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-slate-500">No hay oportunidades con estos filtros.</td></tr>}
           </tbody>
         </table>
       </div>

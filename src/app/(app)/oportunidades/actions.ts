@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
-import { oneOf, str } from "@/lib/forms";
+import { backPath, oneOf, str } from "@/lib/forms";
 import { DIMENSIONS, OPPORTUNITY_STATUSES } from "@/lib/labels";
 import { notify } from "@/lib/notify";
 
@@ -55,10 +55,10 @@ export async function updateOpportunity(id: string, fd: FormData) {
   redirect("/oportunidades");
 }
 
-export async function deleteOpportunity(id: string) {
+export async function deleteOpportunity(id: string, back?: string) {
   const user = await requireUser();
   const o = await db.opportunity.delete({ where: { id } });
   await notify(user, { allianceId: o.allianceId }, `eliminó la oportunidad "${o.title}"`, `/alianzas/${o.allianceId}`);
   revalidate(o.allianceId);
-  redirect("/oportunidades");
+  redirect(backPath(back, "/oportunidades"));
 }

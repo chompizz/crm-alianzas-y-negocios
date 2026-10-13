@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { DeleteButton } from "@/components/row-actions";
 import { db } from "@/lib/db";
 import { deleteOpportunity, updateOpportunity } from "../../actions";
 import { OpportunityForm } from "../../opportunity-form";
@@ -16,9 +17,7 @@ export default async function EditOpportunityPage({ params }: { params: Promise<
       <PageHeader
         title={opportunity.title}
         actions={
-          <form action={deleteOpportunity.bind(null, id)}>
-            <button className="btn-danger">Eliminar</button>
-          </form>
+          <DeleteButton action={deleteOpportunity.bind(null, id, "/oportunidades")} confirm={`¿Eliminar la oportunidad "${opportunity.title}"?`} label="oportunidad" variant="button" />
         }
       />
       <OpportunityForm action={updateOpportunity.bind(null, id)} alliances={alliances} opportunity={opportunity} cancelHref="/oportunidades" />

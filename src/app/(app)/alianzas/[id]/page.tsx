@@ -3,8 +3,12 @@ import { notFound } from "next/navigation";
 import { CommitmentRow } from "@/components/commitment-row";
 import { OfferingsSection } from "@/components/offerings-section";
 import { OwnersPicker } from "@/components/owners-picker";
+import { deleteInteraction } from "../../interacciones/actions";
+import { deleteInitiative } from "../../iniciativas/actions";
+import { deleteOpportunity } from "../../oportunidades/actions";
 import { ClientsSection } from "./clients-section";
 import { PageHeader } from "@/components/page-header";
+import { DeleteButton, PencilIcon, RowActions } from "@/components/row-actions";
 import { ProgressBar } from "@/components/progress-bar";
 import { db } from "@/lib/db";
 import { ownerNames, ownersSelect } from "@/lib/owners";
@@ -33,10 +37,10 @@ export default async function AlliancePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ cliente?: string }>;
+  searchParams: Promise<{ cliente?: string; participante?: string }>;
 }) {
   const { id } = await params;
-  const { cliente } = await searchParams;
+  const { cliente, participante } = await searchParams;
   const alliance = await db.alliance.findUnique({
     where: { id },
     include: {
@@ -84,6 +88,7 @@ export default async function AlliancePage({
   const elsewhere = organizations.filter((o) => !o.countries.some((c) => c.code === alliance.countryCode));
   const contacts = alliance.participants.flatMap((p) => p.organization.contacts.map((c) => ({ ...c, orgName: p.organization.name })));
   const today = dateInput(new Date());
+  const editingParticipant = alliance.participants.find((p) => p.organizationId === participante);
 
   return (
     <>
@@ -92,10 +97,8 @@ export default async function AlliancePage({
         subtitle={`${alliance.country.name} · ${ALLIANCE_TYPES[alliance.type]} · ${DIMENSIONS[alliance.dimension]}`}
         actions={
           <>
-            <Link href={`/alianzas/${id}/editar`} className="btn-secondary">Editar</Link>
-            <form action={deleteAlliance.bind(null, id)}>
-              <button className="btn-danger">Eliminar</button>
-            </form>
+            <Link href={`/alianzas/${id}/editar`} className="btn-secondary inline-flex items-center gap-1.5"><PencilIcon />Editar</Link>
+            <DeleteButton action={deleteAlliance.bind(null, id)} confirm={`¿Eliminar la alianza "${alliance.name}"? Se borran también sus participantes, clientes, oportunidades y compromisos.`} label="alianza" variant="button" />
           </>
         }
       />
@@ -125,7 +128,7 @@ export default async function AlliancePage({
             {alliance.objectives && <Field label="Objetivos"><p className="whitespace-pre-line">{alliance.objectives}</p></Field>}
           </section>
 
-          <section className="card">
+          <section id="participantes" className="card scroll-mt-4">
             <h2 className="mb-3 font-semibold">Participantes</h2>
             <ul className="mb-3 divide-y divide-slate-100">
               {alliance.participants.map((p) => (
@@ -136,13 +139,31 @@ export default async function AlliancePage({
                     {p.role && <span className="block text-xs text-slate-500">{p.role}</span>}
                     {p.organization.parent && <span className="block text-xs text-slate-500">Grupo {p.organization.parent.name}</span>}
                   </span>
-                  <form action={removeParticipant.bind(null, id, p.organizationId)}>
-                    <button className="text-xs text-slate-400 hover:text-red-600">Quitar</button>
-                  </form>
+                  <RowActions
+                    editHref={`/alianzas/${id}?participante=${p.organizationId}#participantes`}
+                    scroll={false}
+                    deleteAction={removeParticipant.bind(null, id, p.organizationId)}
+                    confirm={`¿Quitar a ${p.organization.name} de esta alianza? La organización no se borra.`}
+                    label={p.organization.name}
+                  />
                 </li>
               ))}
               {alliance.participants.length === 0 && <li className="py-2 text-sm text-slate-500">Sin participantes.</li>}
             </ul>
+            {editingParticipant ? (
+              <form action={addParticipant.bind(null, id)} className="space-y-2 rounded-lg border border-indigo-500/40 p-3">
+                <input type="hidden" name="organizationId" value={editingParticipant.organizationId} />
+                <p className="text-sm font-medium">Editar rol de {editingParticipant.organization.name}</p>
+                <select name="roleType" defaultValue={editingParticipant.roleType} className="input">
+                  {Object.entries(PARTICIPANT_ROLES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                <input name="role" defaultValue={editingParticipant.role ?? ""} placeholder="Detalle del rol (opcional)" className="input" />
+                <div className="flex gap-2">
+                  <button className="btn-primary">Guardar</button>
+                  <Link href={`/alianzas/${id}#participantes`} scroll={false} className="btn-secondary">Cancelar</Link>
+                </div>
+              </form>
+            ) : (
             <form action={addParticipant.bind(null, id)} className="space-y-2">
               <select name="organizationId" required defaultValue="" className="input">
                 <option value="" disabled>Agregar organización...</option>
@@ -165,6 +186,7 @@ export default async function AlliancePage({
               </div>
               <input name="role" placeholder="Detalle del rol (opcional): aporta tecnología, co-financia 30%..." className="input" />
             </form>
+            )}
           </section>
 
           <OfferingsSection
@@ -186,11 +208,19 @@ export default async function AlliancePage({
               </div>
               <ul className="divide-y divide-slate-100 text-sm">
                 {alliance.opportunities.map((o) => (
-                  <li key={o.id} className="flex justify-between gap-2 py-2">
-                    <Link href={`/oportunidades/${o.id}/editar`} className="hover:underline">{o.title}</Link>
-                    <span className="shrink-0 text-xs text-slate-500">
-                      {fmtUsd(o.estimatedValue)}{o.probability != null && ` · ${o.probability}%`} · {OPPORTUNITY_STATUSES[o.status]}
+                  <li key={o.id} className="flex items-center justify-between gap-2 py-2">
+                    <span className="min-w-0">
+                      <Link href={`/oportunidades/${o.id}/editar`} className="hover:underline">{o.title}</Link>
+                      <span className="block text-xs text-slate-500">
+                        {fmtUsd(o.estimatedValue)}{o.probability != null && ` · ${o.probability}%`} · {OPPORTUNITY_STATUSES[o.status]}
+                      </span>
                     </span>
+                    <RowActions
+                      editHref={`/oportunidades/${o.id}/editar`}
+                      deleteAction={deleteOpportunity.bind(null, o.id, `/alianzas/${id}`)}
+                      confirm={`¿Eliminar la oportunidad "${o.title}"?`}
+                      label={o.title}
+                    />
                   </li>
                 ))}
                 {alliance.opportunities.length === 0 && <li className="py-2 text-slate-500">Sin oportunidades.</li>}
@@ -204,7 +234,15 @@ export default async function AlliancePage({
               <ul className="space-y-3 text-sm">
                 {alliance.initiatives.map((i) => (
                   <li key={i.id}>
-                    <Link href={`/iniciativas/${i.id}`} className="hover:underline">{i.name}</Link>
+                    <div className="flex items-center justify-between gap-2">
+                      <Link href={`/iniciativas/${i.id}`} className="hover:underline">{i.name}</Link>
+                      <RowActions
+                        editHref={`/iniciativas/${i.id}/editar`}
+                        deleteAction={deleteInitiative.bind(null, i.id, `/alianzas/${id}`)}
+                        confirm={`¿Eliminar la iniciativa "${i.name}"? Se borran también sus hitos y compromisos.`}
+                        label={i.name}
+                      />
+                    </div>
                     <ProgressBar value={i.progress} />
                   </li>
                 ))}
@@ -219,10 +257,10 @@ export default async function AlliancePage({
             <h2 className="mb-3 font-semibold">Compromisos</h2>
             <div className="overflow-x-auto">
               <table className="table">
-                <thead><tr><th>Compromiso</th><th>Quién</th><th>Fecha</th><th>Estado</th></tr></thead>
+                <thead><tr><th>Compromiso</th><th>Quién</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
                 <tbody>
-                  {alliance.commitments.map((c) => <CommitmentRow key={c.id} commitment={c} />)}
-                  {alliance.commitments.length === 0 && <tr><td colSpan={4} className="py-4 text-center text-slate-500">Sin compromisos.</td></tr>}
+                  {alliance.commitments.map((c) => <CommitmentRow key={c.id} commitment={c} back={`/alianzas/${id}`} />)}
+                  {alliance.commitments.length === 0 && <tr><td colSpan={5} className="py-4 text-center text-slate-500">Sin compromisos.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -282,10 +320,19 @@ export default async function AlliancePage({
             <ol className="space-y-4">
               {alliance.interactions.map((i) => (
                 <li key={i.id} className="border-l-2 border-indigo-200 pl-4">
-                  <p className="text-xs text-slate-500">
-                    {fmtDate(i.date)} · {INTERACTION_TYPES[i.type]}
-                    {i.author && ` · registrado por ${i.author.name}`}
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs text-slate-500">
+                      {fmtDate(i.date)} · {INTERACTION_TYPES[i.type]}
+                      {i.author && ` · registrado por ${i.author.name}`}
+                    </p>
+                    <RowActions
+                      editHref={`/interacciones/${i.id}/editar`}
+                      deleteAction={deleteInteraction.bind(null, i.id)}
+                      confirm="¿Eliminar esta interacción? Los compromisos que salieron de ella se conservan."
+                      label="interacción"
+                      className="-mt-1"
+                    />
+                  </div>
                   <p className="mt-1 whitespace-pre-line text-sm">{i.summary}</p>
                   {i.contacts.length > 0 && <p className="mt-1 text-xs text-slate-500">Con: {i.contacts.map((c) => c.name).join(", ")}</p>}
                   {i.commitments.length > 0 && <p className="mt-1 text-xs text-amber-700">{i.commitments.length} compromiso(s) generado(s)</p>}

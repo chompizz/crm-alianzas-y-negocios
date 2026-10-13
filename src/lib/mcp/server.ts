@@ -24,6 +24,7 @@ import {
   HEALTH,
   INTERACTION_TYPES,
   OFFERING_KINDS,
+  OPPORTUNITY_STATUSES,
   ORGANIZATION_TYPES,
   PARTICIPANT_ROLES,
   RELATIONSHIP_LEVELS,
@@ -169,8 +170,8 @@ function buildServer(user: User) {
     {
       title: "Facturación potencial por país",
       description:
-        "Lo mismo que muestra el mapa del tablero: por cada país con alianzas abiertas, cantidad de alianzas, " +
-        "facturación potencial (suma del valor esperado) y oportunidades abiertas ponderadas por probabilidad. Ordenado de mayor a menor.",
+        "Lo mismo que muestra el mapa del tablero: por cada país, las oportunidades abiertas de sus alianzas consolidadas: " +
+        "cantidad, facturación potencial (suma del valor estimado) y valor ponderado por probabilidad. Ordenado de mayor a menor.",
       annotations: { readOnlyHint: true },
     },
     async () =>
@@ -178,9 +179,10 @@ function buildServer(user: User) {
         (await revenueByCountry()).map((r) => ({
           codigo: r.code,
           pais: r.name,
-          alianzasAbiertas: r.alliances,
+          oportunidadesAbiertas: r.opportunities,
+          alianzasConOportunidades: r.alliances,
           facturacionPotencialUSD: r.potential,
-          oportunidadesPonderadasUSD: Math.round(r.weightedOpportunities),
+          valorPonderadoUSD: Math.round(r.weightedOpportunities),
         })),
       ),
   );
@@ -641,17 +643,36 @@ function buildServer(user: User) {
     "actualizar_compromiso",
     {
       title: "Actualizar compromiso",
-      description: "Marca un compromiso como cumplido, cancelado o pendiente.",
-      inputSchema: { id: z.string(), estado: z.enum(keys(COMMITMENT_STATUSES)) },
+      description:
+        "Cambia el estado (cumplido, cancelado o pendiente), la descripción, la parte o la fecha límite de un compromiso. " +
+        "Para sus responsables usá asignar_responsables.",
+      inputSchema: {
+        id: z.string(),
+        estado: z.enum(keys(COMMITMENT_STATUSES)).optional(),
+        descripcion: z.string().optional(),
+        parte: z.enum(keys(COMMITMENT_PARTIES)).optional().describe("NOSOTROS o SOCIO"),
+        fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("AAAA-MM-DD; null para borrarla"),
+      },
     },
-    async ({ id, estado }) => {
+    async ({ id, estado, descripcion, parte, fecha }) => {
       const exists = await db.commitment.findUnique({ where: { id }, select: { id: true } });
       if (!exists) return fail("No existe ese compromiso.");
-      const c = await db.commitment.update({ where: { id }, data: { status: estado } });
+      const c = await db.commitment.update({
+        where: { id },
+        data: {
+          status: estado,
+          description: descripcion,
+          party: parte,
+          ...(fecha !== undefined ? { dueDate: parseDate(fecha) } : {}),
+          ...(parte === "SOCIO" ? { owners: { set: [] } } : {}),
+        },
+      });
       await notify(
         user,
         { allianceId: c.allianceId, initiativeId: c.initiativeId, commitmentId: c.id },
-        `marcó "${c.description}" como ${COMMITMENT_STATUSES[c.status].toLowerCase()}`,
+        estado && !descripcion && !parte && fecha === undefined
+          ? `marcó "${c.description}" como ${COMMITMENT_STATUSES[c.status].toLowerCase()}`
+          : `editó el compromiso "${c.description}"`,
         c.allianceId ? `/alianzas/${c.allianceId}` : c.initiativeId ? `/iniciativas/${c.initiativeId}` : "/compromisos",
       );
       return json({ actualizado: true, id: c.id, estado: COMMITMENT_STATUSES[c.status] });
@@ -1341,6 +1362,164 @@ function buildServer(user: User) {
           ? await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { emailNotifications: true, email: true } })
           : await db.user.update({ where: { id: user.id }, data: { emailNotifications: activar }, select: { emailNotifications: true, email: true } });
       return json({ avisosPorEmail: u.emailNotifications, email: u.email });
+    },
+  );
+
+  server.registerTool(
+    "actualizar_oportunidad",
+    {
+      title: "Actualizar oportunidad",
+      description: "Cambia el título, la descripción, el valor, la probabilidad, el estado, la dimensión o la alianza de una oportunidad.",
+      inputSchema: {
+        id: z.string(),
+        titulo: z.string().optional(),
+        descripcion: z.string().nullable().optional(),
+        valorEstimadoUSD: z.number().nonnegative().nullable().optional(),
+        probabilidad: z.number().int().min(0).max(100).nullable().optional(),
+        estado: z.enum(keys(OPPORTUNITY_STATUSES)).optional(),
+        dimension: dimension().optional(),
+        alianzaId: z.string().optional(),
+      },
+    },
+    async ({ id, titulo, descripcion, valorEstimadoUSD, probabilidad, estado, dimension, alianzaId }) => {
+      if (!(await db.opportunity.findUnique({ where: { id }, select: { id: true } }))) return fail("No existe esa oportunidad.");
+      if (alianzaId && !(await db.alliance.findUnique({ where: { id: alianzaId }, select: { id: true } }))) return fail("No existe esa alianza.");
+      const o = await db.opportunity.update({
+        where: { id },
+        data: {
+          title: titulo,
+          description: descripcion,
+          estimatedValue: valorEstimadoUSD,
+          probability: probabilidad,
+          status: estado,
+          dimension,
+          allianceId: alianzaId,
+        },
+        include: { alliance: { select: { name: true } } },
+      });
+      await notify(user, { allianceId: o.allianceId }, `actualizó la oportunidad "${o.title}" de "${o.alliance.name}" desde Claude`, "/oportunidades");
+      return json({
+        actualizada: true,
+        id: o.id,
+        titulo: o.title,
+        estado: OPPORTUNITY_STATUSES[o.status],
+        valorEstimadoUSD: o.estimatedValue ? Number(o.estimatedValue) : null,
+        probabilidad: o.probability,
+      });
+    },
+  );
+
+  server.registerTool(
+    "actualizar_iniciativa",
+    {
+      title: "Actualizar iniciativa",
+      description:
+        "Cambia el nombre, el objetivo o la dimensión de una iniciativa, o reemplaza las alianzas y organizaciones que la impulsan. " +
+        "Para sus responsables usá asignar_responsables.",
+      inputSchema: {
+        id: z.string(),
+        nombre: z.string().optional(),
+        objetivo: z.string().nullable().optional(),
+        dimension: dimension().optional(),
+        alianzas: z.array(z.string()).optional().describe("Ids de alianzas; reemplaza la lista"),
+        organizaciones: z.array(z.string()).optional().describe("Ids de organizaciones; reemplaza la lista"),
+      },
+    },
+    async ({ id, nombre, objetivo, dimension, alianzas, organizaciones }) => {
+      if (!(await db.initiative.findUnique({ where: { id }, select: { id: true } }))) return fail("No existe esa iniciativa.");
+      try {
+        const i = await db.initiative.update({
+          where: { id },
+          data: {
+            name: nombre,
+            objective: objetivo,
+            dimension,
+            ...(alianzas ? { alliances: { set: alianzas.map((a) => ({ id: a })) } } : {}),
+            ...(organizaciones ? { organizations: { set: organizaciones.map((o) => ({ id: o })) } } : {}),
+          },
+          include: { alliances: { select: { name: true } }, organizations: { select: { name: true } } },
+        });
+        await notify(user, { initiativeId: id }, `actualizó la iniciativa "${i.name}" desde Claude`, `/iniciativas/${id}`);
+        return json({
+          actualizada: true,
+          id: i.id,
+          nombre: i.name,
+          dimension: DIMENSIONS[i.dimension],
+          alianzas: i.alliances.map((a) => a.name),
+          organizaciones: i.organizations.map((o) => o.name),
+        });
+      } catch {
+        return fail("Alguna alianza u organización no existe.");
+      }
+    },
+  );
+
+  server.registerTool(
+    "eliminar_registro",
+    {
+      title: "Eliminar registro",
+      description:
+        "Elimina una alianza, iniciativa, oportunidad, organización, contacto, ítem del catálogo, compromiso, interacción o hito. " +
+        "Es definitivo: confirmá siempre con la persona antes, diciéndole qué se borra en cascada " +
+        "(una alianza borra sus participantes, clientes, oportunidades y compromisos; una iniciativa sus hitos y compromisos; " +
+        "una organización sus contactos, participaciones y clientes). Para sacar un cliente o participante de una alianza usá quitar_cliente o quitar_participante.",
+      inputSchema: {
+        tipo: z.enum(["alianza", "iniciativa", "oportunidad", "organizacion", "contacto", "oferta", "compromiso", "interaccion", "hito"]),
+        id: z.string(),
+      },
+      annotations: { destructiveHint: true },
+    },
+    async ({ tipo, id }) => {
+      const where = { where: { id } };
+      try {
+        switch (tipo) {
+          case "alianza": {
+            const a = await db.alliance.findUniqueOrThrow({ ...where, select: { name: true } });
+            await notify(user, { allianceId: id }, `eliminó la alianza "${a.name}" desde Claude`);
+            await db.alliance.delete(where);
+            return json({ eliminado: true, tipo, nombre: a.name });
+          }
+          case "iniciativa": {
+            const i = await db.initiative.findUniqueOrThrow({ ...where, select: { name: true } });
+            await notify(user, { initiativeId: id }, `eliminó la iniciativa "${i.name}" desde Claude`);
+            await db.initiative.delete(where);
+            return json({ eliminado: true, tipo, nombre: i.name });
+          }
+          case "oportunidad": {
+            const o = await db.opportunity.findUniqueOrThrow({ ...where, select: { title: true, allianceId: true } });
+            await notify(user, { allianceId: o.allianceId }, `eliminó la oportunidad "${o.title}" desde Claude`, `/alianzas/${o.allianceId}`);
+            await db.opportunity.delete(where);
+            return json({ eliminado: true, tipo, nombre: o.title });
+          }
+          case "compromiso": {
+            const c = await db.commitment.findUniqueOrThrow({ ...where, select: { description: true, allianceId: true, initiativeId: true } });
+            await notify(user, { allianceId: c.allianceId, initiativeId: c.initiativeId, commitmentId: id }, `eliminó el compromiso "${c.description}" desde Claude`);
+            await db.commitment.delete(where);
+            return json({ eliminado: true, tipo, nombre: c.description });
+          }
+          case "interaccion": {
+            const i = await db.interaction.findUniqueOrThrow({ ...where, select: { allianceId: true, alliance: { select: { name: true } } } });
+            if (i.allianceId) await notify(user, { allianceId: i.allianceId }, `eliminó una interacción de "${i.alliance?.name}" desde Claude`, `/alianzas/${i.allianceId}`);
+            await db.interaction.delete(where);
+            return json({ eliminado: true, tipo });
+          }
+          case "hito": {
+            const m = await db.milestone.delete({ ...where, select: { title: true, initiativeId: true } });
+            const all = await db.milestone.findMany({ where: { initiativeId: m.initiativeId }, select: { done: true } });
+            const progress = all.length ? Math.round((all.filter((x) => x.done).length / all.length) * 100) : 0;
+            await db.initiative.update({ where: { id: m.initiativeId }, data: { progress } });
+            return json({ eliminado: true, tipo, nombre: m.title });
+          }
+          case "organizacion":
+            return json({ eliminado: true, tipo, nombre: (await db.organization.delete({ ...where, select: { name: true } })).name });
+          case "contacto":
+            return json({ eliminado: true, tipo, nombre: (await db.contact.delete({ ...where, select: { name: true } })).name });
+          case "oferta":
+            return json({ eliminado: true, tipo, nombre: (await db.offering.delete({ ...where, select: { name: true } })).name });
+        }
+      } catch {
+        return fail(`No encontré ${tipo === "organizacion" ? "esa organización" : tipo === "interaccion" ? "esa interacción" : `ese registro (${tipo})`}.`);
+      }
     },
   );
 

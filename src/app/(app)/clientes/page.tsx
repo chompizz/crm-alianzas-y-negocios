@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ClientStatus, Prisma } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
+import { RowActions } from "@/components/row-actions";
+import { removeClient } from "../alianzas/actions";
 import { db } from "@/lib/db";
 import { fmtDate, fmtUsd } from "@/lib/format";
 import { CLIENT_STATUS_STYLE, CLIENT_STATUSES } from "@/lib/labels";
@@ -51,7 +53,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
       </div>
       <div className="card overflow-x-auto p-0">
         <table className="table">
-          <thead><tr><th>Cliente</th><th>Alianza</th><th>País</th><th>Estado</th><th>Facturación anual</th><th>Desde</th></tr></thead>
+          <thead><tr><th>Cliente</th><th>Alianza</th><th>País</th><th>Estado</th><th>Facturación anual</th><th>Desde</th><th></th></tr></thead>
           <tbody>
             {clients.map((c) => (
               <tr key={c.id}>
@@ -61,10 +63,18 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
                 <td><span className={`rounded-full border px-2 py-0.5 text-xs ${CLIENT_STATUS_STYLE[c.status]}`}>{CLIENT_STATUSES[c.status]}</span></td>
                 <td className="font-mono">{fmtUsd(c.revenue)}</td>
                 <td>{fmtDate(c.since)}</td>
+                <td>
+                  <RowActions
+                    editHref={`/alianzas/${c.allianceId}?cliente=${c.id}#clientes`}
+                    deleteAction={removeClient.bind(null, c.allianceId, c.id)}
+                    confirm={`¿Quitar a ${c.organization.name} de los clientes de ${c.alliance.name}? La organización no se borra.`}
+                    label={c.organization.name}
+                  />
+                </td>
               </tr>
             ))}
             {clients.length === 0 && (
-              <tr><td colSpan={6} className="py-8 text-center text-slate-500">Todavía no hay clientes. Se cargan desde la ficha de cada alianza.</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-slate-500">Todavía no hay clientes. Se cargan desde la ficha de cada alianza.</td></tr>
             )}
           </tbody>
         </table>

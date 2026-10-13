@@ -59,6 +59,7 @@ export default async function SalesFlowPage() {
           meta: fmtUsd(c.revenue),
           badge: CLIENT_STATUSES[c.status],
           href: `/alianzas/${c.allianceId}#clientes`,
+          allianceId: c.allianceId,
         }))}
       />
     </>

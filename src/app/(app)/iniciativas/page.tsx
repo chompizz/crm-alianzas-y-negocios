@@ -3,10 +3,12 @@ import type { Dimension } from "@prisma/client";
 import { DimensionBadge } from "@/components/dimension-badge";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
+import { RowActions } from "@/components/row-actions";
 import { db } from "@/lib/db";
 import { ownerNames, ownersSelect } from "@/lib/owners";
 import { fmtDate } from "@/lib/format";
 import { DIMENSIONS } from "@/lib/labels";
+import { deleteInitiative } from "./actions";
 
 export default async function InitiativesPage({ searchParams }: { searchParams: Promise<{ dim?: string }> }) {
   const { dim } = await searchParams;
@@ -39,9 +41,10 @@ export default async function InitiativesPage({ searchParams }: { searchParams: 
           const next = i.milestones[0];
           const countries = [...new Set(i.alliances.map((a) => a.country.name))];
           return (
-            <Link key={i.id} href={`/iniciativas/${i.id}`} className="card block space-y-2 hover:border-indigo-200">
+            <div key={i.id} className="card relative space-y-2 hover:border-indigo-200">
               <div className="flex items-start justify-between gap-2">
-                <p className="font-medium text-slate-900">{i.name}</p>
+                {/* El enlace cubre toda la tarjeta; el lápiz y la X quedan por encima. */}
+                <Link href={`/iniciativas/${i.id}`} className="font-medium text-slate-900 after:absolute after:inset-0">{i.name}</Link>
                 <DimensionBadge dimension={i.dimension} />
               </div>
               {countries.length > 0 && <p className="text-xs text-slate-500">{countries.join(", ")}</p>}
@@ -49,8 +52,17 @@ export default async function InitiativesPage({ searchParams }: { searchParams: 
               <p className="text-xs text-slate-500">
                 {next ? `Próximo hito: ${next.title}${next.dueDate ? ` (${fmtDate(next.dueDate)})` : ""}` : "Sin hitos pendientes"}
               </p>
-              <p className="text-xs text-slate-400">{ownerNames(i.owners, "Sin responsable")}</p>
-            </Link>
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-xs text-slate-400">{ownerNames(i.owners, "Sin responsable")}</p>
+                <RowActions
+                  className="relative z-10"
+                  editHref={`/iniciativas/${i.id}/editar`}
+                  deleteAction={deleteInitiative.bind(null, i.id, "/iniciativas")}
+                  confirm={`¿Eliminar la iniciativa "${i.name}"? Se borran también sus hitos y compromisos.`}
+                  label={i.name}
+                />
+              </div>
+            </div>
           );
         })}
         {initiatives.length === 0 && <p className="text-sm text-slate-500">Todavía no hay iniciativas.</p>}

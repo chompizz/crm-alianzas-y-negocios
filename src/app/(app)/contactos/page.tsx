@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
+import { RowActions } from "@/components/row-actions";
+import { deleteContact } from "./actions";
 import { db } from "@/lib/db";
 import { RELATIONSHIP_LEVELS } from "@/lib/labels";
 
@@ -36,7 +38,7 @@ export default async function ContactsPage({
       </form>
       <div className="card overflow-x-auto p-0">
         <table className="table">
-          <thead><tr><th>Nombre</th><th>Organización</th><th>Cargo</th><th>País</th><th>Relación</th><th>Email</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Organización</th><th>Cargo</th><th>País</th><th>Relación</th><th>Email</th><th></th></tr></thead>
           <tbody>
             {contacts.map((c) => (
               <tr key={c.id} className="hover:bg-slate-50">
@@ -46,9 +48,17 @@ export default async function ContactsPage({
                 <td>{c.country?.name}</td>
                 <td>{RELATIONSHIP_LEVELS[c.relationshipLevel]}</td>
                 <td>{c.email}</td>
+                <td>
+                  <RowActions
+                    editHref={`/contactos/${c.id}/editar`}
+                    deleteAction={deleteContact.bind(null, c.id, "/contactos")}
+                    confirm={`¿Eliminar a ${c.name}?`}
+                    label={c.name}
+                  />
+                </td>
               </tr>
             ))}
-            {contacts.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-slate-500">No hay contactos con estos filtros.</td></tr>}
+            {contacts.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-slate-500">No hay contactos con estos filtros.</td></tr>}
           </tbody>
         </table>
       </div>

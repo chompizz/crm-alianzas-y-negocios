@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Commitment } from "@prisma/client";
 import { setCommitmentStatus } from "@/app/(app)/alianzas/actions";
+import { deleteCommitment } from "@/app/(app)/compromisos/actions";
+import { RowActions } from "@/components/row-actions";
 import { fmtDate, startOfTodayUtc } from "@/lib/format";
 import { COMMITMENT_PARTIES, COMMITMENT_STATUSES } from "@/lib/labels";
 import { ownerNames } from "@/lib/owners";
@@ -12,9 +14,11 @@ type Props = {
     initiative?: { id: string; name: string } | null;
   };
   showAlliance?: boolean;
+  // Página a la que volver después de editar o eliminar.
+  back: string;
 };
 
-export function CommitmentRow({ commitment: c, showAlliance }: Props) {
+export function CommitmentRow({ commitment: c, showAlliance, back }: Props) {
   const overdue = c.status === "PENDIENTE" && c.dueDate && c.dueDate < startOfTodayUtc();
   return (
     <tr>
@@ -37,6 +41,14 @@ export function CommitmentRow({ commitment: c, showAlliance }: Props) {
           </select>
           <button className="btn-secondary px-2 py-1 text-xs">OK</button>
         </form>
+      </td>
+      <td>
+        <RowActions
+          editHref={`/compromisos/${c.id}/editar?volver=${encodeURIComponent(back)}`}
+          deleteAction={deleteCommitment.bind(null, c.id, undefined)}
+          confirm={`¿Eliminar el compromiso "${c.description}"?`}
+          label="compromiso"
+        />
       </td>
     </tr>
   );

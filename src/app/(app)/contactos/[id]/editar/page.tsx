@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { DeleteButton } from "@/components/row-actions";
 import { db } from "@/lib/db";
 import { deleteContact, updateContact } from "../../actions";
 import { ContactForm } from "../../contact-form";
@@ -17,9 +18,7 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
       <PageHeader
         title={contact.name}
         actions={
-          <form action={deleteContact.bind(null, id)}>
-            <button className="btn-danger">Eliminar</button>
-          </form>
+          <DeleteButton action={deleteContact.bind(null, id, undefined)} confirm={`¿Eliminar a ${contact.name}?`} label="contacto" variant="button" />
         }
       />
       <ContactForm

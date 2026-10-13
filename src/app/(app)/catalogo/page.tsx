@@ -1,9 +1,11 @@
 import Link from "next/link";
 import type { OfferingKind } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
+import { RowActions } from "@/components/row-actions";
+
 import { db } from "@/lib/db";
 import { OFFERING_KINDS, OFFERING_STYLE } from "@/lib/labels";
-import { createOffering } from "./actions";
+import { createOffering, deleteOffering } from "./actions";
 
 export default async function CatalogPage({ searchParams }: { searchParams: Promise<{ tipo?: string }> }) {
   const { tipo } = await searchParams;
@@ -30,7 +32,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
           </form>
           <div className="card overflow-x-auto p-0">
             <table className="table">
-              <thead><tr><th>Nombre</th><th>Tipo</th><th>Lo ofrecen</th><th className="text-right">Alianzas</th></tr></thead>
+              <thead><tr><th>Nombre</th><th>Tipo</th><th>Lo ofrecen</th><th className="text-right">Alianzas</th><th></th></tr></thead>
               <tbody>
                 {offerings.map((o) => (
                   <tr key={o.id}>
@@ -45,9 +47,17 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                       ))}
                     </td>
                     <td className="text-right font-mono">{o._count.alliances}</td>
+                    <td>
+                      <RowActions
+                        editHref={`/catalogo/${o.id}`}
+                        deleteAction={deleteOffering.bind(null, o.id)}
+                        confirm={`¿Eliminar "${o.name}" del catálogo?`}
+                        label={o.name}
+                      />
+                    </td>
                   </tr>
                 ))}
-                {offerings.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-slate-500">Todavía no hay ítems en el catálogo.</td></tr>}
+                {offerings.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-slate-500">Todavía no hay ítems en el catálogo.</td></tr>}
               </tbody>
             </table>
           </div>

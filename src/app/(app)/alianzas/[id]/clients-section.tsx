@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { AllianceClient, Organization } from "@prisma/client";
+import { RowActions } from "@/components/row-actions";
 import { dateInput, fmtDate, fmtUsd } from "@/lib/format";
 import { CLIENT_STATUS_STYLE, CLIENT_STATUSES } from "@/lib/labels";
 import { addClient, removeClient, updateClient } from "../actions";
@@ -42,11 +43,14 @@ export function ClientsSection({
                 <td><span className={`rounded-full border px-2 py-0.5 text-xs ${CLIENT_STATUS_STYLE[c.status]}`}>{CLIENT_STATUSES[c.status]}</span></td>
                 <td className="font-mono">{fmtUsd(c.revenue)}</td>
                 <td>{fmtDate(c.since)}</td>
-                <td className="text-right">
-                  <Link href={`/alianzas/${allianceId}?cliente=${c.id}#clientes`} scroll={false} className="text-xs text-indigo-700 hover:underline">Editar</Link>
-                  <form action={removeClient.bind(null, allianceId, c.id)} className="ml-3 inline">
-                    <button className="text-xs text-slate-400 hover:text-red-600">Quitar</button>
-                  </form>
+                <td>
+                  <RowActions
+                    editHref={`/alianzas/${allianceId}?cliente=${c.id}#clientes`}
+                    scroll={false}
+                    deleteAction={removeClient.bind(null, allianceId, c.id)}
+                    confirm={`¿Quitar a ${c.organization.name} de los clientes de esta alianza? La organización no se borra.`}
+                    label={c.organization.name}
+                  />
                 </td>
               </tr>
             ))}
