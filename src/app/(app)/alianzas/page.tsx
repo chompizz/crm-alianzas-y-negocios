@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
 import { dateInput, fmtUsd } from "@/lib/format";
 import { ALLIANCE_TYPES, DIMENSIONS } from "@/lib/labels";
+import { ownerNames, ownersSelect } from "@/lib/owners";
 import { KanbanBoard } from "./kanban-board";
 
 export default async function AlliancesPage({
@@ -15,7 +16,7 @@ export default async function AlliancesPage({
   const where: Prisma.AllianceWhereInput = {};
   if (pais) where.countryCode = pais;
   if (tipo && tipo in ALLIANCE_TYPES) where.type = tipo as AllianceType;
-  if (resp) where.ownerId = resp;
+  if (resp) where.owners = { some: { id: resp } };
   if (dim && dim in DIMENSIONS) where.dimension = dim as Dimension;
 
   const [alliances, countries, users] = await Promise.all([
@@ -24,7 +25,7 @@ export default async function AlliancesPage({
       orderBy: { updatedAt: "desc" },
       include: {
         country: true,
-        owner: { select: { name: true } },
+        ...ownersSelect,
         participants: { include: { organization: { select: { name: true } } } },
         _count: { select: { commitments: { where: { status: "PENDIENTE" } }, clients: true } },
       },
@@ -70,11 +71,11 @@ export default async function AlliancesPage({
           dimension: a.dimension,
           subtitle: `${a.country.name} · ${ALLIANCE_TYPES[a.type]}`,
           participants: a.participants.map((p) => p.organization.name).join(", "),
-          owner: a.owner?.name ?? "Sin responsable",
+          owner: ownerNames(a.owners),
           value: fmtUsd(a.expectedValue),
           pendingCommitments: a._count.commitments,
           clients: a._count.clients,
-          ownerId: a.ownerId ?? "",
+          ownerIds: a.owners.map((o) => o.id),
           expectedValue: a.expectedValue?.toString() ?? "",
           startDate: dateInput(a.startDate),
           renewalDate: dateInput(a.renewalDate),

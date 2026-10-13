@@ -7,7 +7,7 @@ import { AllianceForm } from "../../alliance-form";
 export default async function EditAlliancePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [alliance, countries, users] = await Promise.all([
-    db.alliance.findUnique({ where: { id } }),
+    db.alliance.findUnique({ where: { id }, include: { owners: { select: { id: true } } } }),
     db.country.findMany({ orderBy: { name: "asc" } }),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);

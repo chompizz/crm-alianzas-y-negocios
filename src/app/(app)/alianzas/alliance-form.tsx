@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Alliance, Country, User } from "@prisma/client";
 import { DimensionSelect } from "@/components/dimension-select";
+import { OwnersPicker } from "@/components/owners-picker";
 import { dateInput } from "@/lib/format";
 import { ALLIANCE_STAGES, ALLIANCE_TYPES, HEALTH } from "@/lib/labels";
 
@@ -10,7 +11,7 @@ type Props = {
   action: (fd: FormData) => Promise<void>;
   countries: Country[];
   users: Pick<User, "id" | "name">[];
-  alliance?: Alliance;
+  alliance?: Alliance & { owners?: { id: string }[] };
   // Solo al crear: elegir organizaciones participantes de entrada.
   organizations?: OrgOption[];
   defaultCountry?: string;
@@ -51,13 +52,7 @@ export function AllianceForm({ action, countries, users, alliance, organizations
             {Object.entries(HEALTH).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
-        <label>
-          <span className="label">Responsable interno</span>
-          <select name="ownerId" defaultValue={alliance?.ownerId ?? ""} className="input">
-            <option value="">Sin asignar</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </label>
+        <OwnersPicker users={users} defaultValue={alliance?.owners?.map((o) => o.id)} />
         <label>
           <span className="label">Valor esperado (USD)</span>
           <input name="expectedValue" inputMode="decimal" defaultValue={alliance?.expectedValue?.toString() ?? ""} className="input" />

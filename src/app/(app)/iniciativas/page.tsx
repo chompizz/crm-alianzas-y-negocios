@@ -4,6 +4,7 @@ import { DimensionBadge } from "@/components/dimension-badge";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { db } from "@/lib/db";
+import { ownerNames, ownersSelect } from "@/lib/owners";
 import { fmtDate } from "@/lib/format";
 import { DIMENSIONS } from "@/lib/labels";
 
@@ -13,7 +14,7 @@ export default async function InitiativesPage({ searchParams }: { searchParams: 
     where: dim && dim in DIMENSIONS ? { dimension: dim as Dimension } : {},
     orderBy: { updatedAt: "desc" },
     include: {
-      owner: { select: { name: true } },
+      ...ownersSelect,
       alliances: { select: { name: true, country: { select: { name: true } } } },
       milestones: { where: { done: false }, orderBy: { dueDate: { sort: "asc", nulls: "last" } }, take: 1 },
     },
@@ -48,7 +49,7 @@ export default async function InitiativesPage({ searchParams }: { searchParams: 
               <p className="text-xs text-slate-500">
                 {next ? `Próximo hito: ${next.title}${next.dueDate ? ` (${fmtDate(next.dueDate)})` : ""}` : "Sin hitos pendientes"}
               </p>
-              <p className="text-xs text-slate-400">{i.owner?.name ?? "Sin responsable"}</p>
+              <p className="text-xs text-slate-400">{ownerNames(i.owners, "Sin responsable")}</p>
             </Link>
           );
         })}

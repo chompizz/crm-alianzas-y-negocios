@@ -3,10 +3,11 @@ import type { Commitment } from "@prisma/client";
 import { setCommitmentStatus } from "@/app/(app)/alianzas/actions";
 import { fmtDate, startOfTodayUtc } from "@/lib/format";
 import { COMMITMENT_PARTIES, COMMITMENT_STATUSES } from "@/lib/labels";
+import { ownerNames } from "@/lib/owners";
 
 type Props = {
   commitment: Commitment & {
-    owner: { name: string } | null;
+    owners: { name: string }[];
     alliance?: { id: string; name: string } | null;
     initiative?: { id: string; name: string } | null;
   };
@@ -24,7 +25,7 @@ export function CommitmentRow({ commitment: c, showAlliance }: Props) {
           {c.initiative && <Link href={`/iniciativas/${c.initiative.id}`} className="hover:underline">{c.initiative.name}</Link>}
         </td>
       )}
-      <td>{c.party === "SOCIO" ? COMMITMENT_PARTIES.SOCIO : c.owner?.name ?? COMMITMENT_PARTIES.NOSOTROS}</td>
+      <td>{c.party === "SOCIO" ? COMMITMENT_PARTIES.SOCIO : ownerNames(c.owners, COMMITMENT_PARTIES.NOSOTROS)}</td>
       <td className={overdue ? "font-medium text-red-600" : ""}>
         {fmtDate(c.dueDate)}
         {overdue && " (vencido)"}

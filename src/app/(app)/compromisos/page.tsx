@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { CommitmentRow } from "@/components/commitment-row";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
+import { ownersSelect } from "@/lib/owners";
 import { startOfTodayUtc } from "@/lib/format";
 import { COMMITMENT_PARTIES } from "@/lib/labels";
 
@@ -14,7 +15,7 @@ export default async function CommitmentsPage({
   const where: Prisma.CommitmentWhereInput = {};
   if (vista === "pendientes") where.status = "PENDIENTE";
   if (vista === "vencidos") Object.assign(where, { status: "PENDIENTE", dueDate: { lt: startOfTodayUtc() } });
-  if (resp) where.ownerId = resp;
+  if (resp) where.owners = { some: { id: resp } };
   if (parte === "NOSOTROS" || parte === "SOCIO") where.party = parte;
   if (pais) where.OR = [{ alliance: { countryCode: pais } }, { initiative: { alliances: { some: { countryCode: pais } } } }];
 
@@ -22,7 +23,7 @@ export default async function CommitmentsPage({
     db.commitment.findMany({
       where,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
-      include: { owner: { select: { name: true } }, alliance: { select: { id: true, name: true } }, initiative: { select: { id: true, name: true } } },
+      include: { ...ownersSelect, alliance: { select: { id: true, name: true } }, initiative: { select: { id: true, name: true } } },
     }),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.country.findMany({ where: { alliances: { some: {} } }, orderBy: { name: "asc" } }),
