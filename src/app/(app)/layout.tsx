@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
+import { db } from "@/lib/db";
 import { NavLink } from "./nav-link";
 
 const NAV = [
@@ -18,6 +20,11 @@ const NAV = [
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  const me = session?.user?.id
+    ? await db.user.findUnique({ where: { id: session.user.id }, select: { active: true, role: true } })
+    : null;
+  if (!me || !me.active) redirect("/login?error=1");
+  if (me.role === "PARTNER") redirect("/portal");
   const isAdmin = session?.user?.role === "ADMIN";
 
   return (
@@ -39,6 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </NavLink>
           ))}
           <NavLink href="/perfil">Conectar con Claude</NavLink>
+          <NavLink href="/partners">Partners</NavLink>
           {isAdmin && <NavLink href="/usuarios">Usuarios</NavLink>}
         </nav>
         <div className="hidden border-t border-slate-100 px-5 py-4 text-sm md:block">

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { db } from "@/lib/db";
+import { db, INTERNAL_USERS } from "@/lib/db";
 import { updateAlliance } from "../../actions";
 import { AllianceForm } from "../../alliance-form";
 
@@ -9,7 +9,7 @@ export default async function EditAlliancePage({ params }: { params: Promise<{ i
   const [alliance, countries, users] = await Promise.all([
     db.alliance.findUnique({ where: { id }, include: { owners: { select: { id: true } } } }),
     db.country.findMany({ orderBy: { name: "asc" } }),
-    db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.user.findMany({ where: INTERNAL_USERS, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!alliance) notFound();
   return (

@@ -1,6 +1,7 @@
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { signIn } from "@/auth";
+import { db } from "@/lib/db";
 
 export default async function LoginPage({
   searchParams,
@@ -11,11 +12,14 @@ export default async function LoginPage({
 
   async function login(formData: FormData) {
     "use server";
+    // Los partners van directo a su portal.
+    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const account = email ? await db.user.findUnique({ where: { email }, select: { role: true } }) : null;
     try {
       await signIn("credentials", {
         email: formData.get("email"),
         password: formData.get("password"),
-        redirectTo: "/",
+        redirectTo: account?.role === "PARTNER" ? "/portal" : "/",
       });
     } catch (e) {
       if (e instanceof AuthError) redirect("/login?error=1");

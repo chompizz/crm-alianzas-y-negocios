@@ -5,7 +5,7 @@ import { OwnersPicker } from "@/components/owners-picker";
 import { PageHeader } from "@/components/page-header";
 import { DeleteButton, PencilIcon, RowActions } from "@/components/row-actions";
 import { ProgressBar } from "@/components/progress-bar";
-import { db } from "@/lib/db";
+import { db, INTERNAL_USERS } from "@/lib/db";
 import { ownerNames, ownersSelect } from "@/lib/owners";
 import { dateInput, fmtDate, startOfTodayUtc } from "@/lib/format";
 import { COMMITMENT_PARTIES, DIMENSIONS, HEALTH_DOT } from "@/lib/labels";
@@ -31,7 +31,7 @@ export default async function InitiativePage({
         commitments: { orderBy: [{ status: "asc" }, { dueDate: "asc" }], include: ownersSelect },
       },
     }),
-    db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.user.findMany({ where: INTERNAL_USERS, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!initiative) notFound();
   const editingMilestone = initiative.milestones.find((m) => m.id === hito);

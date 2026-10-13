@@ -90,8 +90,8 @@ async function send(email: string, name: string, items: Item[]) {
   }
   const subject = items.length === 1 ? `Nexo: ${items[0].text}` : `Nexo: ${items.length} novedades`;
   const first = name.split(" ")[0];
-  const text = [`Hola ${first}, hubo cambios en Nexo en cosas de las que sos responsable:`, "", ...items.map((i) => `- ${i.text}${i.href ? ` (${i.href})` : ""}`), "", "Podés dejar de recibir estos avisos desde Mi perfil en Nexo."].join("\n");
-  const html = `<p>Hola ${esc(first)}, hubo cambios en Nexo en cosas de las que sos responsable:</p><ul>${items
+  const text = [`Hola ${first}, hay novedades en Nexo:`, "", ...items.map((i) => `- ${i.text}${i.href ? ` (${i.href})` : ""}`), "", "Podés dejar de recibir estos avisos desde Mi perfil en Nexo."].join("\n");
+  const html = `<p>Hola ${esc(first)}, hay novedades en Nexo:</p><ul>${items
     .map((i) => `<li>${i.href ? `<a href="${esc(i.href)}">${esc(i.text)}</a>` : esc(i.text)}</li>`)
     .join("")}</ul><p style="color:#64748b;font-size:12px">Podés dejar de recibir estos avisos desde Mi perfil en Nexo.</p>`;
   try {

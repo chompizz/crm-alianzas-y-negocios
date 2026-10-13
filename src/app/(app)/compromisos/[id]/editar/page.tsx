@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { OwnersPicker } from "@/components/owners-picker";
 import { PageHeader } from "@/components/page-header";
 import { DeleteButton } from "@/components/row-actions";
-import { db } from "@/lib/db";
+import { db, INTERNAL_USERS } from "@/lib/db";
 import { backPath } from "@/lib/forms";
 import { dateInput } from "@/lib/format";
 import { COMMITMENT_PARTIES, COMMITMENT_STATUSES } from "@/lib/labels";
@@ -23,7 +23,7 @@ export default async function EditCommitmentPage({
       where: { id },
       include: { owners: { select: { id: true } }, alliance: { select: { name: true } }, initiative: { select: { name: true } } },
     }),
-    db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.user.findMany({ where: INTERNAL_USERS, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!c) notFound();
   return (

@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { PageHeader } from "@/components/page-header";
-import { db } from "@/lib/db";
-import { ROLES } from "@/lib/labels";
+import { db, INTERNAL_USERS } from "@/lib/db";
+import { ROLE_LABELS, ROLES } from "@/lib/labels";
 import { createUser, deleteUser } from "./actions";
 import { RowActions } from "@/components/row-actions";
 
@@ -21,7 +21,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   if (session?.user?.role !== "ADMIN") redirect("/");
   const me = session.user;
   const { ok, error } = await searchParams;
-  const users = await db.user.findMany({ orderBy: { name: "asc" } });
+  const users = await db.user.findMany({ where: INTERNAL_USERS, orderBy: { name: "asc" } });
 
   return (
     <>
@@ -37,7 +37,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                 <tr key={u.id}>
                   <td className="font-medium">{u.name}{u.id === me.id && <span className="ml-1 text-xs text-slate-500">(vos)</span>}</td>
                   <td>{u.email}</td>
-                  <td>{ROLES[u.role]}</td>
+                  <td>{ROLE_LABELS[u.role]}</td>
                   <td>
                     <RowActions
                       editHref={`/usuarios/${u.id}/editar`}

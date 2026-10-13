@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { AllianceType, Dimension, Prisma } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
-import { db } from "@/lib/db";
+import { db, INTERNAL_USERS } from "@/lib/db";
 import { dateInput, fmtUsd } from "@/lib/format";
 import { ALLIANCE_TYPES, DIMENSIONS } from "@/lib/labels";
 import { ownerNames, ownersSelect } from "@/lib/owners";
@@ -31,7 +31,7 @@ export default async function AlliancesPage({
       },
     }),
     db.country.findMany({ where: { alliances: { some: {} } }, orderBy: { name: "asc" } }),
-    db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.user.findMany({ where: INTERNAL_USERS, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   const newHref = pais ? `/alianzas/nueva?pais=${pais}` : "/alianzas/nueva";

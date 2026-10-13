@@ -25,6 +25,7 @@ export default async function EditUserPage({
   const { error } = await searchParams;
   const user = await db.user.findUnique({ where: { id } });
   if (!user) notFound();
+  if (user.role === "PARTNER") redirect(`/partners/cuentas/${id}/editar`);
   const isMe = session.user.id === id;
 
   return (

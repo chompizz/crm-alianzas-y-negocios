@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { CommitmentRow } from "@/components/commitment-row";
 import { PageHeader } from "@/components/page-header";
-import { db } from "@/lib/db";
+import { db, INTERNAL_USERS } from "@/lib/db";
 import { ownersSelect } from "@/lib/owners";
 import { startOfTodayUtc } from "@/lib/format";
 import { COMMITMENT_PARTIES } from "@/lib/labels";
@@ -25,7 +25,7 @@ export default async function CommitmentsPage({
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
       include: { ...ownersSelect, alliance: { select: { id: true, name: true } }, initiative: { select: { id: true, name: true } } },
     }),
-    db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.user.findMany({ where: INTERNAL_USERS, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.country.findMany({ where: { alliances: { some: {} } }, orderBy: { name: "asc" } }),
   ]);
 
