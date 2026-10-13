@@ -18,6 +18,7 @@ export type KanbanCard = {
   owner: string;
   value: string;
   pendingCommitments: number;
+  clients: number;
   // Valores crudos para la edición rápida.
   ownerId: string;
   expectedValue: string;
@@ -124,6 +125,9 @@ export function KanbanBoard({ cards, users }: { cards: KanbanCard[]; users: User
                       <span>{a.owner}</span>
                       <span>{a.value}</span>
                     </div>
+                    {a.clients > 0 && (
+                      <p className="mt-1 text-xs text-emerald-700">{a.clients} {a.clients === 1 ? "cliente" : "clientes"}</p>
+                    )}
                     {a.pendingCommitments > 0 && (
                       <p className="mt-1 text-xs text-amber-700">{a.pendingCommitments} compromiso(s) pendiente(s)</p>
                     )}

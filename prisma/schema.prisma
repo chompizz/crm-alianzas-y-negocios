@@ -85,6 +85,7 @@ model Organization {
   participations AllianceParticipant[]
   initiatives    Initiative[]
   offerings      Offering[]
+  clientOf       AllianceClient[]
 }
 
 enum RelationshipLevel {
@@ -164,6 +165,7 @@ model Alliance {
   updatedAt     DateTime      @updatedAt
 
   participants  AllianceParticipant[]
+  clients       AllianceClient[]
   offerings     Offering[]
   opportunities Opportunity[]
   initiatives   Initiative[]
@@ -180,6 +182,31 @@ model AllianceParticipant {
   role           String? // detalle libre del rol
 
   @@id([allianceId, organizationId])
+}
+
+// Clientes que atiende una alianza: una alianza puede tener muchos clientes y una
+// organización puede ser cliente de varias alianzas.
+model AllianceClient {
+  id             String        @id @default(cuid())
+  allianceId     String
+  alliance       Alliance      @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  status         ClientStatus  @default(PROSPECTO)
+  revenue        Decimal?      @db.Decimal(14, 2) // facturación anual estimada, USD
+  since          DateTime?
+  notes          String?
+  offerings      Offering[] // lo que compra
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([allianceId, organizationId])
+}
+
+enum ClientStatus {
+  PROSPECTO
+  ACTIVO
+  INACTIVO
 }
 
 enum ParticipantRole {
@@ -210,6 +237,7 @@ model Offering {
   description   String?
   organizations Organization[]
   alliances     Alliance[]
+  clients       AllianceClient[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import {
   ALLIANCE_STAGES,
   ALLIANCE_TYPES,
+  CLIENT_STATUSES,
   DIMENSIONS,
   OFFERING_KINDS,
   ORGANIZATION_TYPES,
@@ -68,6 +69,15 @@ export const importSchema = {
           .array(z.object({ organizacion: z.string(), rol: z.enum(keys(PARTICIPANT_ROLES)).optional(), detalle: z.string().optional() }))
           .optional(),
         productos: z.array(z.string()).optional().describe("Nombres de ítems del catálogo"),
+        clientes: z
+          .array(
+            z.object({
+              nombre: z.string().describe("Nombre de la organización cliente; si no existe se crea en el país de la alianza"),
+              estado: z.enum(keys(CLIENT_STATUSES)).optional(),
+              facturacionAnualUSD: z.number().nonnegative().optional(),
+            }),
+          )
+          .optional(),
       }),
     )
     .optional(),
@@ -265,6 +275,31 @@ export async function importData(input: ImportInput, simulate: boolean) {
         return id ? [{ id }] : [];
       });
       if (products.length) await tx.alliance.update({ where: { id: alliance.id }, data: { offerings: { connect: products } } });
+      for (const c of a.clientes ?? []) {
+        let organizationId = orgs.get(norm(c.nombre));
+        if (!organizationId) {
+          organizationId = (
+            await tx.organization.create({ data: { name: c.nombre.trim(), countries: { connect: { code: alliance.countryCode } } } })
+          ).id;
+          orgs.set(norm(c.nombre), organizationId);
+          report.creados.push(`Organización: ${c.nombre}`);
+        }
+        const data = {
+          ...(c.estado ? { status: c.estado } : {}),
+          ...(c.facturacionAnualUSD !== undefined ? { revenue: c.facturacionAnualUSD } : {}),
+        };
+        const existing = await tx.allianceClient.findUnique({
+          where: { allianceId_organizationId: { allianceId: alliance.id, organizationId } },
+          select: { id: true },
+        });
+        if (existing) {
+          if (Object.keys(data).length) await tx.allianceClient.update({ where: { id: existing.id }, data });
+          report.yaExistian.push(`Cliente: ${c.nombre} (${a.nombre})`);
+        } else {
+          await tx.allianceClient.create({ data: { allianceId: alliance.id, organizationId, ...data } });
+          report.creados.push(`Cliente: ${c.nombre} (${a.nombre})`);
+        }
+      }
     }
 
     for (const o of input.oportunidades ?? []) {

@@ -13,6 +13,7 @@ import { parseDate, startOfTodayUtc } from "@/lib/format";
 import {
   ALLIANCE_STAGES,
   ALLIANCE_TYPES,
+  CLIENT_STATUSES,
   COMMITMENT_PARTIES,
   COMMITMENT_STATUSES,
   DIMENSION_DESCRIPTIONS,
@@ -49,7 +50,8 @@ function buildServer(user: User) {
         "Nexo es el CRM interno de alianzas, estrategia y negocios del equipo. Cada alianza pertenece a un país; " +
         "una organización puede operar en varios países y pertenecer a un grupo (casa matriz con filiales). Cada organización participa en una alianza con un rol " +
         "(líder, socio, proveedor, cliente, canal, integrador, financiador, institucional u otro). El catálogo guarda productos, servicios y otros, " +
-        "que se asignan a organizaciones (lo que ofrecen) y a alianzas (lo que se vende o entrega). Usá las herramientas de lectura antes de crear registros " +
+        "que se asignan a organizaciones (lo que ofrecen) y a alianzas (lo que se vende o entrega). Cada alianza puede tener muchos clientes, " +
+        "con estado (prospecto, activo, inactivo) y facturación anual. Usá las herramientas de lectura antes de crear registros " +
         "para no duplicar, y confirmá con la persona antes de crear o modificar datos. Fechas en formato AAAA-MM-DD. " +
         "Para cargar información que la persona pega o sube (texto, notas de reunión, planillas, PDF), extraé los datos y usá importar_datos: " +
         "primero con simular=true para mostrarle qué se va a crear, y después de su confirmación con simular=false. " +
@@ -222,6 +224,7 @@ function buildServer(user: User) {
           parent: { select: { id: true, name: true } },
           subsidiaries: { select: { id: true, name: true } },
           offerings: true,
+          clientOf: { include: { alliance: { select: { id: true, name: true } } } },
         },
       });
       if (!o) return fail("No existe esa organización.");
@@ -237,6 +240,12 @@ function buildServer(user: User) {
         grupo: o.parent ? { id: o.parent.id, nombre: o.parent.name } : null,
         filiales: o.subsidiaries.map((f) => ({ id: f.id, nombre: f.name })),
         ofertas: o.offerings.map((f) => ({ id: f.id, nombre: f.name, tipo: OFFERING_KINDS[f.kind] })),
+        clienteDe: o.clientOf.map((c) => ({
+          alianzaId: c.allianceId,
+          alianza: c.alliance.name,
+          estado: CLIENT_STATUSES[c.status],
+          facturacionAnualUSD: c.revenue ? Number(c.revenue) : null,
+        })),
         contactos: o.contacts.map((c) => ({ id: c.id, nombre: c.name, cargo: c.position, email: c.email, pais: c.country?.name })),
         alianzas: o.participations.map((p) => ({
           id: p.allianceId,
@@ -350,6 +359,7 @@ function buildServer(user: User) {
           opportunities: true,
           initiatives: { select: { id: true, name: true, progress: true } },
           offerings: true,
+          clients: { include: { organization: { select: { id: true, name: true } } } },
         },
       });
       if (!a) return fail("No existe esa alianza.");
@@ -373,6 +383,15 @@ function buildServer(user: User) {
           detalleRol: p.role,
         })),
         ofertas: a.offerings.map((f) => ({ id: f.id, nombre: f.name, tipo: OFFERING_KINDS[f.kind] })),
+        clientes: a.clients.map((c) => ({
+          id: c.id,
+          organizacionId: c.organization.id,
+          nombre: c.organization.name,
+          estado: CLIENT_STATUSES[c.status],
+          facturacionAnualUSD: c.revenue ? Number(c.revenue) : null,
+          desde: day(c.since),
+          notas: c.notes,
+        })),
         ultimasInteracciones: a.interactions.map((i) => ({
           fecha: day(i.date),
           tipo: INTERACTION_TYPES[i.type],
@@ -975,6 +994,120 @@ function buildServer(user: User) {
         include: { countries: true },
       });
       return json({ actualizada: true, id: o.id, nombre: o.name, paises: o.countries.map((c) => c.name) });
+    },
+  );
+
+  server.registerTool(
+    "listar_clientes",
+    {
+      title: "Listar clientes",
+      description: "Clientes de las alianzas, con estado y facturación anual. Filtrá por alianza, país o estado.",
+      inputSchema: {
+        alianzaId: z.string().optional(),
+        pais: z.string().optional(),
+        estado: z.enum(keys(CLIENT_STATUSES)).optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ alianzaId, pais, estado }) => {
+      const country = pais ? await resolveCountry(pais) : null;
+      if (pais && !country) return fail(`No encontré el país "${pais}".`);
+      const clients = await db.allianceClient.findMany({
+        where: {
+          ...(alianzaId ? { allianceId: alianzaId } : {}),
+          ...(estado ? { status: estado } : {}),
+          ...(country ? { alliance: { countryCode: country.code } } : {}),
+        },
+        include: {
+          organization: { select: { id: true, name: true } },
+          alliance: { select: { id: true, name: true, country: { select: { name: true } } } },
+        },
+        orderBy: { organization: { name: "asc" } },
+      });
+      return json(
+        clients.map((c) => ({
+          id: c.id,
+          cliente: c.organization.name,
+          organizacionId: c.organization.id,
+          alianza: c.alliance.name,
+          alianzaId: c.alliance.id,
+          pais: c.alliance.country.name,
+          estado: CLIENT_STATUSES[c.status],
+          facturacionAnualUSD: c.revenue ? Number(c.revenue) : null,
+          desde: day(c.since),
+        })),
+      );
+    },
+  );
+
+  server.registerTool(
+    "agregar_cliente",
+    {
+      title: "Agregar o actualizar cliente de una alianza",
+      description:
+        "Suma un cliente a una alianza (o actualiza su estado y facturación si ya lo era). Pasá organizacionId de una organización existente, " +
+        "o nombreNuevo para crearla en el país de la alianza.",
+      inputSchema: {
+        alianzaId: z.string(),
+        organizacionId: z.string().optional(),
+        nombreNuevo: z.string().optional(),
+        estado: z.enum(keys(CLIENT_STATUSES)).optional().describe("PROSPECTO (por defecto), ACTIVO o INACTIVO"),
+        facturacionAnualUSD: z.number().nonnegative().optional(),
+        desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("AAAA-MM-DD"),
+        notas: z.string().optional(),
+      },
+    },
+    async ({ alianzaId, organizacionId, nombreNuevo, estado, facturacionAnualUSD, desde, notas }) => {
+      const alliance = await db.alliance.findUnique({ where: { id: alianzaId }, select: { countryCode: true } });
+      if (!alliance) return fail("No existe esa alianza.");
+      if (!organizacionId === !nombreNuevo) return fail("Indicá organizacionId o nombreNuevo (uno solo).");
+      let orgId = organizacionId;
+      if (orgId && !(await db.organization.findUnique({ where: { id: orgId }, select: { id: true } }))) {
+        return fail("No existe esa organización.");
+      }
+      if (nombreNuevo) {
+        const existing = await db.organization.findFirst({
+          where: { name: { equals: nombreNuevo.trim(), mode: "insensitive" } },
+          select: { id: true },
+        });
+        orgId =
+          existing?.id ??
+          (await db.organization.create({
+            data: { name: nombreNuevo.trim(), countries: { connect: { code: alliance.countryCode } } },
+          })).id;
+      }
+      const data = {
+        ...(estado ? { status: estado } : {}),
+        ...(facturacionAnualUSD !== undefined ? { revenue: facturacionAnualUSD } : {}),
+        ...(desde ? { since: parseDate(desde) } : {}),
+        ...(notas !== undefined ? { notes: notas } : {}),
+      };
+      const c = await db.allianceClient.upsert({
+        where: { allianceId_organizationId: { allianceId: alianzaId, organizationId: orgId! } },
+        update: data,
+        create: { allianceId: alianzaId, organizationId: orgId!, ...data },
+        include: { organization: { select: { name: true } } },
+      });
+      return json({
+        ok: true,
+        id: c.id,
+        cliente: c.organization.name,
+        estado: CLIENT_STATUSES[c.status],
+        facturacionAnualUSD: c.revenue ? Number(c.revenue) : null,
+      });
+    },
+  );
+
+  server.registerTool(
+    "quitar_cliente",
+    {
+      title: "Quitar cliente de una alianza",
+      description: "Saca un cliente de una alianza (la organización sigue existiendo).",
+      inputSchema: { alianzaId: z.string(), organizacionId: z.string() },
+    },
+    async ({ alianzaId, organizacionId }) => {
+      const r = await db.allianceClient.deleteMany({ where: { allianceId: alianzaId, organizationId: organizacionId } });
+      return r.count ? json({ ok: true }) : fail("Esa organización no es cliente de esa alianza.");
     },
   );
 

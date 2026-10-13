@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
 import { OfferingsSection } from "@/components/offerings-section";
-import { ALLIANCE_STAGES, HEALTH_DOT, ORGANIZATION_TYPES, PARTICIPANT_ROLES, RELATIONSHIP_LEVELS } from "@/lib/labels";
+import { fmtUsd } from "@/lib/format";
+import { ALLIANCE_STAGES, CLIENT_STATUS_STYLE, CLIENT_STATUSES, HEALTH_DOT, ORGANIZATION_TYPES, PARTICIPANT_ROLES, RELATIONSHIP_LEVELS } from "@/lib/labels";
 import { deleteOrganization } from "../actions";
 
 export default async function OrganizationPage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,6 +21,7 @@ export default async function OrganizationPage({ params }: { params: Promise<{ i
       parent: { select: { id: true, name: true } },
       subsidiaries: { select: { id: true, name: true, type: true }, orderBy: { name: "asc" } },
       offerings: { select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } },
+      clientOf: { include: { alliance: { select: { id: true, name: true, country: { select: { name: true } } } } } },
     },
   }),
   db.offering.findMany({ select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } }),
@@ -147,6 +149,24 @@ export default async function OrganizationPage({ params }: { params: Promise<{ i
             </tbody>
           </table>
         </section>
+        {org.clientOf.length > 0 && (
+          <section className="card lg:col-span-3">
+            <h2 className="mb-3 font-semibold">Es cliente de</h2>
+            <table className="table">
+              <thead><tr><th>Alianza</th><th>País</th><th>Estado</th><th>Facturación anual</th></tr></thead>
+              <tbody>
+                {org.clientOf.map((c) => (
+                  <tr key={c.id}>
+                    <td><Link href={`/alianzas/${c.allianceId}`} className="font-medium text-indigo-700 hover:underline">{c.alliance.name}</Link></td>
+                    <td>{c.alliance.country.name}</td>
+                    <td><span className={`rounded-full border px-2 py-0.5 text-xs ${CLIENT_STATUS_STYLE[c.status]}`}>{CLIENT_STATUSES[c.status]}</span></td>
+                    <td className="font-mono">{fmtUsd(c.revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
       </div>
     </>
   );

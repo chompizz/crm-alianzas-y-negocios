@@ -10,6 +10,7 @@ import { parseDate } from "@/lib/format";
 import {
   ALLIANCE_STAGES,
   ALLIANCE_TYPES,
+  CLIENT_STATUSES,
   COMMITMENT_PARTIES,
   COMMITMENT_STATUSES,
   DIMENSIONS,
@@ -183,4 +184,56 @@ export async function quickUpdateAlliance(id: string, fd: FormData) {
   revalidatePath("/alianzas");
   revalidatePath(`/alianzas/${id}`);
   revalidatePath("/");
+}
+
+// Clientes de la alianza: se elige una organización existente o se crea una nueva por nombre
+// (por defecto en el país de la alianza).
+export async function addClient(allianceId: string, fd: FormData) {
+  await requireUser();
+  let organizationId = str(fd, "organizationId");
+  const newName = str(fd, "newName");
+  if (!organizationId && newName) {
+    const alliance = await db.alliance.findUniqueOrThrow({ where: { id: allianceId }, select: { countryCode: true } });
+    const existing = await db.organization.findFirst({
+      where: { name: { equals: newName, mode: "insensitive" } },
+      select: { id: true },
+    });
+    organizationId =
+      existing?.id ??
+      (await db.organization.create({ data: { name: newName, countries: { connect: { code: alliance.countryCode } } } })).id;
+  }
+  if (!organizationId) return;
+  const data = readClient(fd);
+  await db.allianceClient.upsert({
+    where: { allianceId_organizationId: { allianceId, organizationId } },
+    update: data,
+    create: { allianceId, organizationId, ...data },
+  });
+  revalidatePath(`/alianzas/${allianceId}`);
+  revalidatePath("/clientes");
+}
+
+export async function updateClient(allianceId: string, clientId: string, fd: FormData) {
+  await requireUser();
+  await db.allianceClient.update({ where: { id: clientId }, data: readClient(fd) });
+  revalidatePath(`/alianzas/${allianceId}`);
+  revalidatePath("/clientes");
+  redirect(`/alianzas/${allianceId}#clientes`);
+}
+
+export async function removeClient(allianceId: string, clientId: string) {
+  await requireUser();
+  await db.allianceClient.delete({ where: { id: clientId } });
+  revalidatePath(`/alianzas/${allianceId}`);
+  revalidatePath("/clientes");
+}
+
+function readClient(fd: FormData) {
+  const revenue = str(fd, "revenue");
+  return {
+    status: oneOf(fd, "status", CLIENT_STATUSES, "PROSPECTO"),
+    revenue: revenue ? revenue.replace(/[^\d.]/g, "") || null : null,
+    since: parseDate(str(fd, "since")),
+    notes: str(fd, "notes"),
+  };
 }

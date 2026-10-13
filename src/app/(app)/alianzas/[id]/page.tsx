@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CommitmentRow } from "@/components/commitment-row";
 import { OfferingsSection } from "@/components/offerings-section";
+import { ClientsSection } from "./clients-section";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { db } from "@/lib/db";
@@ -25,8 +26,15 @@ import {
   removeParticipant,
 } from "../actions";
 
-export default async function AlliancePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AlliancePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ cliente?: string }>;
+}) {
   const { id } = await params;
+  const { cliente } = await searchParams;
   const alliance = await db.alliance.findUnique({
     where: { id },
     include: {
@@ -51,11 +59,15 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
       opportunities: { orderBy: { createdAt: "desc" } },
       initiatives: { orderBy: { name: "asc" }, select: { id: true, name: true, progress: true } },
       offerings: { select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } },
+      clients: {
+        include: { organization: { select: { id: true, name: true } } },
+        orderBy: [{ status: "asc" }, { organization: { name: "asc" } }],
+      },
     },
   });
   if (!alliance) notFound();
 
-  const [organizations, users, catalog] = await Promise.all([
+  const [organizations, users, catalog, allOrgs] = await Promise.all([
     db.organization.findMany({
       where: { id: { notIn: alliance.participants.map((p) => p.organizationId) } },
       orderBy: { name: "asc" },
@@ -63,6 +75,7 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
     }),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.offering.findMany({ select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } }),
+    db.organization.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   // Primero las organizaciones que operan en el país de la alianza.
   const inCountry = organizations.filter((o) => o.countries.some((c) => c.code === alliance.countryCode));
@@ -197,6 +210,8 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
               </ul>
             </section>
           </div>
+
+          <ClientsSection allianceId={id} clients={alliance.clients} organizations={allOrgs} editingId={cliente} />
 
           <section className="card">
             <h2 className="mb-3 font-semibold">Compromisos</h2>
