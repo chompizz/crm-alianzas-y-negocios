@@ -91,3 +91,11 @@ export const OFFERING_STYLE: Record<keyof typeof OFFERING_KINDS, string> = {
   SERVICIO: "border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-300",
   OTRO: "border-slate-300 bg-slate-100 text-slate-700",
 };
+
+export const CLIENT_STATUSES = { PROSPECTO: "Prospecto", ACTIVO: "Activo", INACTIVO: "Inactivo" } as const;
+
+export const CLIENT_STATUS_STYLE: Record<keyof typeof CLIENT_STATUSES, string> = {
+  PROSPECTO: "border-amber-400/40 bg-amber-500/10 text-amber-300",
+  ACTIVO: "border-emerald-400/40 bg-emerald-500/10 text-emerald-300",
+  INACTIVO: "border-slate-300 bg-slate-100 text-slate-500",
+};
