@@ -28,7 +28,11 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <PageHeader title="Clientes" subtitle="Clientes que atienden las alianzas" />
+      <PageHeader
+        title="Clientes"
+        subtitle="Clientes que atienden las alianzas"
+        actions={<Link href="/clientes/nuevo" className="btn-primary">Nuevo cliente</Link>}
+      />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <form className="flex flex-wrap gap-2">
           <select name="estado" defaultValue={estado ?? ""} className="input max-w-[12rem]">
