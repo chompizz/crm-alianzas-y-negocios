@@ -73,12 +73,12 @@ Sin `RESEND_API_KEY` o `EMAIL_FROM` no se envía nada y los avisos quedan en los
 
 Los partners que participan en las alianzas pueden entrar a Nexo con su propia cuenta y registrar oportunidades de clientes. Entran a `/portal` y solo ven las alianzas en que participa su organización y lo que ellos mismos registraron; no ven datos internos ni de otros partners.
 
-1. Un administrador crea la cuenta en **Partners → Cuentas** (organización partner, nombre, email y contraseña inicial) y se la pasa a la persona por un canal seguro. Desde ahí también se desactiva, se reactiva o se cambia la contraseña.
+1. En **Partners → Partners** se da de alta el partner (organización existente o nueva) y se eligen las alianzas en las que participa; ahí mismo se modifica o se da de baja. Un administrador crea la cuenta en **Partners → Cuentas** (o al dar de alta el partner) (organización partner, nombre, email y contraseña inicial) y se la pasa a la persona por un canal seguro. Desde ahí también se desactiva, se reactiva o se cambia la contraseña.
 2. El partner registra la oportunidad (cliente, contacto, valor, fecha esperada, notas). Queda **pendiente** y los responsables de la alianza reciben un email.
 3. El equipo la revisa en **Partners → Registros**: si el cliente ya existe o lo registró otro partner aparece un aviso. Al **aprobar** se crea una oportunidad normal en la alianza marcada como "traída por" el partner; al **rechazar** hay que escribir el motivo, que el partner ve.
 4. El partner sigue el estado en su portal (pendiente, aprobada, ganada) y ve en **Mis clientes** los que se ganaron.
 
-Desde Claude: `listar_registros_partner`, `aprobar_registro`, `rechazar_registro` y la gestión de cuentas (`listar_cuentas_partner`, `crear_cuenta_partner`, `actualizar_cuenta_partner`, `eliminar_cuenta_partner`). Las cuentas de partner no pueden usar el conector.
+Desde Claude: `listar_partners`, `guardar_partner`, `baja_partner`, `listar_registros_partner`, `aprobar_registro`, `rechazar_registro` y la gestión de cuentas (`listar_cuentas_partner`, `crear_cuenta_partner`, `actualizar_cuenta_partner`, `eliminar_cuenta_partner`). Las cuentas de partner no pueden usar el conector.
 
 ## Stack
 
