@@ -159,8 +159,7 @@ model Alliance {
   expectedValue Decimal?      @db.Decimal(14, 2) // USD
   startDate     DateTime?
   renewalDate   DateTime?
-  ownerId       String?
-  owner         User?         @relation("AllianceOwner", fields: [ownerId], references: [id])
+  owners        User[]        @relation("AllianceOwner")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -276,8 +275,7 @@ model Initiative {
   objective     String?
   progress      Int            @default(0) // 0 a 100
   dimension     Dimension      @default(ESTRATEGIA)
-  ownerId       String?
-  owner         User?          @relation("InitiativeOwner", fields: [ownerId], references: [id])
+  owners        User[]         @relation("InitiativeOwner")
   alliances     Alliance[]
   organizations Organization[]
   createdAt     DateTime       @default(now())
@@ -342,8 +340,7 @@ model Commitment {
   party         CommitmentParty  @default(NOSOTROS)
   status        CommitmentStatus @default(PENDIENTE)
   dueDate       DateTime?
-  ownerId       String?
-  owner         User?            @relation("CommitmentOwner", fields: [ownerId], references: [id])
+  owners        User[]           @relation("CommitmentOwner")
   interactionId String?
   interaction   Interaction?     @relation(fields: [interactionId], references: [id], onDelete: SetNull)
   allianceId    String?

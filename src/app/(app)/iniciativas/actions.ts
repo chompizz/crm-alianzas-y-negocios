@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
-import { all, oneOf, str } from "@/lib/forms";
+import { all, oneOf, ownerIds, str } from "@/lib/forms";
+import { connectOwners, setOwners } from "@/lib/owners";
 import { parseDate } from "@/lib/format";
 import { COMMITMENT_PARTIES, DIMENSIONS } from "@/lib/labels";
 
@@ -15,7 +16,7 @@ function readInitiative(fd: FormData) {
     name,
     objective: str(fd, "objective"),
     dimension: oneOf(fd, "dimension", DIMENSIONS, "ESTRATEGIA"),
-    ownerId: str(fd, "ownerId"),
+    ownerIds: ownerIds(fd),
     allianceIds: all(fd, "alliances"),
     organizationIds: all(fd, "organizations"),
   };
@@ -23,10 +24,11 @@ function readInitiative(fd: FormData) {
 
 export async function createInitiative(fd: FormData) {
   await requireUser();
-  const { allianceIds, organizationIds, ...data } = readInitiative(fd);
+  const { allianceIds, organizationIds, ownerIds: owners, ...data } = readInitiative(fd);
   const initiative = await db.initiative.create({
     data: {
       ...data,
+      owners: connectOwners(owners),
       alliances: { connect: allianceIds.map((id) => ({ id })) },
       organizations: { connect: organizationIds.map((id) => ({ id })) },
     },
@@ -37,11 +39,12 @@ export async function createInitiative(fd: FormData) {
 
 export async function updateInitiative(id: string, fd: FormData) {
   await requireUser();
-  const { allianceIds, organizationIds, ...data } = readInitiative(fd);
+  const { allianceIds, organizationIds, ownerIds: owners, ...data } = readInitiative(fd);
   await db.initiative.update({
     where: { id },
     data: {
       ...data,
+      owners: setOwners(owners),
       alliances: { set: allianceIds.map((aid) => ({ id: aid })) },
       organizations: { set: organizationIds.map((oid) => ({ id: oid })) },
     },
@@ -102,7 +105,7 @@ export async function addInitiativeCommitment(initiativeId: string, fd: FormData
       description,
       party,
       dueDate: parseDate(str(fd, "dueDate")),
-      ownerId: party === "NOSOTROS" ? str(fd, "ownerId") : null,
+      owners: connectOwners(party === "NOSOTROS" ? ownerIds(fd) : []),
     },
   });
   revalidatePath(`/iniciativas/${initiativeId}`);

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
-import { all, oneOf, str } from "@/lib/forms";
+import { all, oneOf, ownerIds, str } from "@/lib/forms";
+import { connectOwners, setOwners } from "@/lib/owners";
 import { stageDefaults } from "@/lib/alliance-stage";
 import { parseDate } from "@/lib/format";
 import {
@@ -35,7 +36,6 @@ function readAlliance(fd: FormData) {
     expectedValue: value ? value.replace(/[^\d.]/g, "") || null : null,
     startDate: parseDate(str(fd, "startDate")),
     renewalDate: parseDate(str(fd, "renewalDate")),
-    ownerId: str(fd, "ownerId"),
   };
 }
 
@@ -44,7 +44,11 @@ export async function createAlliance(fd: FormData) {
   const data = readAlliance(fd);
   const organizationIds = all(fd, "organizations");
   const alliance = await db.alliance.create({
-    data: { ...data, participants: { create: organizationIds.map((organizationId) => ({ organizationId })) } },
+    data: {
+      ...data,
+      owners: connectOwners(ownerIds(fd)),
+      participants: { create: organizationIds.map((organizationId) => ({ organizationId })) },
+    },
   });
   revalidatePath("/alianzas");
   redirect(`/alianzas/${alliance.id}`);
@@ -52,7 +56,7 @@ export async function createAlliance(fd: FormData) {
 
 export async function updateAlliance(id: string, fd: FormData) {
   await requireUser();
-  await db.alliance.update({ where: { id }, data: readAlliance(fd) });
+  await db.alliance.update({ where: { id }, data: { ...readAlliance(fd), owners: setOwners(ownerIds(fd)) } });
   revalidatePath("/alianzas");
   redirect(`/alianzas/${id}`);
 }
@@ -117,7 +121,7 @@ export async function addInteraction(allianceId: string, fd: FormData) {
           allianceId,
           party,
           dueDate,
-          ownerId: party === "NOSOTROS" ? str(fd, "commitmentOwnerId") : null,
+          owners: connectOwners(party === "NOSOTROS" ? ownerIds(fd, "commitmentOwnerIds") : []),
         })),
       },
     },
@@ -137,7 +141,7 @@ export async function addCommitment(allianceId: string, fd: FormData) {
       description,
       party,
       dueDate: parseDate(str(fd, "dueDate")),
-      ownerId: party === "NOSOTROS" ? str(fd, "ownerId") : null,
+      owners: connectOwners(party === "NOSOTROS" ? ownerIds(fd) : []),
     },
   });
   revalidatePath(`/alianzas/${allianceId}`);
@@ -175,7 +179,7 @@ export async function quickUpdateAlliance(id: string, fd: FormData) {
     where: { id },
     data: {
       health: oneOf(fd, "health", HEALTH, "VERDE"),
-      ownerId: str(fd, "ownerId"),
+      owners: setOwners(ownerIds(fd)),
       expectedValue: value ? value.replace(/[^\d.]/g, "") || null : null,
       startDate: parseDate(str(fd, "startDate")),
       renewalDate: parseDate(str(fd, "renewalDate")),

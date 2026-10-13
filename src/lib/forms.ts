@@ -19,3 +19,8 @@ export function oneOf<T extends string>(fd: FormData, key: string, options: Reco
   const v = str(fd, key);
   return v && v in options ? (v as T) : fallback;
 }
+
+// Responsables internos: varios selects con el mismo nombre; se quitan vacíos y repetidos.
+export function ownerIds(fd: FormData, key = "ownerIds"): string[] {
+  return [...new Set(all(fd, key))];
+}

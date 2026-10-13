@@ -6,6 +6,7 @@ import { SalesFlowDiagram } from "@/components/sales-flow-diagram";
 import { revenueByCountry } from "@/lib/country-revenue";
 import { dimensionSummary } from "@/lib/dimension-summary";
 import { db } from "@/lib/db";
+import { ownerNames, ownersSelect } from "@/lib/owners";
 import { salesFlowSummary } from "@/lib/sales-flow";
 import { fmtDate, fmtUsdCompact, startOfTodayUtc } from "@/lib/format";
 import { ALLIANCE_STAGES, DIMENSION_STYLE, DIMENSIONS, HEALTH_DOT } from "@/lib/labels";
@@ -28,7 +29,7 @@ export default async function DashboardPage() {
       where: { status: "PENDIENTE", dueDate: { lt: today } },
       orderBy: { dueDate: "asc" },
       take: 8,
-      include: { alliance: { select: { id: true, name: true } }, owner: { select: { name: true } } },
+      include: { alliance: { select: { id: true, name: true } }, ...ownersSelect },
     }),
     db.organization.count(),
     db.organization.findMany({ select: { _count: { select: { countries: true } } } }),
@@ -125,7 +126,7 @@ export default async function DashboardPage() {
                 <p>{c.description}</p>
                 <p className="text-xs text-slate-500">
                   {c.alliance && <Link href={`/alianzas/${c.alliance.id}`} className="hover:underline">{c.alliance.name}</Link>}
-                  {" · "}{c.party === "SOCIO" ? "Socio" : c.owner?.name ?? "Nosotros"}
+                  {" · "}{c.party === "SOCIO" ? "Socio" : ownerNames(c.owners, "Nosotros")}
                   {" · "}<span className="text-red-600">{fmtDate(c.dueDate)}</span>
                 </p>
               </li>

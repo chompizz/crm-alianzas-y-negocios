@@ -1,13 +1,14 @@
 import Link from "next/link";
 import type { Initiative, User } from "@prisma/client";
 import { DimensionSelect } from "@/components/dimension-select";
+import { OwnersPicker } from "@/components/owners-picker";
 
 type Props = {
   action: (fd: FormData) => Promise<void>;
   users: Pick<User, "id" | "name">[];
   alliances: { id: string; name: string; country: { name: string } }[];
   organizations: { id: string; name: string }[];
-  initiative?: Initiative & { alliances: { id: string }[]; organizations: { id: string }[] };
+  initiative?: Initiative & { alliances: { id: string }[]; organizations: { id: string }[]; owners: { id: string }[] };
   cancelHref: string;
 };
 
@@ -21,14 +22,8 @@ export function InitiativeForm({ action, users, alliances, organizations, initia
           <span className="label">Nombre *</span>
           <input name="name" required defaultValue={initiative?.name} className="input" />
         </label>
-        <label>
-          <span className="label">Responsable</span>
-          <select name="ownerId" defaultValue={initiative?.ownerId ?? ""} className="input">
-            <option value="">Sin asignar</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </label>
         <DimensionSelect defaultValue={initiative?.dimension ?? "ESTRATEGIA"} />
+        <OwnersPicker users={users} defaultValue={initiative?.owners.map((o) => o.id)} />
       </div>
       <label className="block">
         <span className="label">Objetivo estratégico</span>

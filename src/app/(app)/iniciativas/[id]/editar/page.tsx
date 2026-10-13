@@ -10,7 +10,7 @@ export default async function EditInitiativePage({ params }: { params: Promise<{
   const [initiative, [users, alliances, organizations]] = await Promise.all([
     db.initiative.findUnique({
       where: { id },
-      include: { alliances: { select: { id: true } }, organizations: { select: { id: true } } },
+      include: { alliances: { select: { id: true } }, organizations: { select: { id: true } }, owners: { select: { id: true } } },
     }),
     initiativeFormOptions(),
   ]);

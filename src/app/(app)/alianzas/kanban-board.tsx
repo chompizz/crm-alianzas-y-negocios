@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useOptimistic, useState, useTransition } from "react";
 import type { AllianceStage, Dimension, Health } from "@prisma/client";
 import { DimensionBadge } from "@/components/dimension-badge";
+import { OwnersPicker } from "@/components/owners-picker";
 import { ALLIANCE_STAGES, HEALTH, HEALTH_DOT } from "@/lib/labels";
 import { quickUpdateAlliance, setAllianceStage } from "./actions";
 
@@ -20,7 +21,7 @@ export type KanbanCard = {
   pendingCommitments: number;
   clients: number;
   // Valores crudos para la edición rápida.
-  ownerId: string;
+  ownerIds: string[];
   expectedValue: string;
   startDate: string;
   renewalDate: string;
@@ -121,9 +122,9 @@ export function KanbanBoard({ cards, users }: { cards: KanbanCard[]; users: User
                     <p className="mt-1 text-xs text-slate-500">{a.subtitle}</p>
                     <div className="mt-1.5"><DimensionBadge dimension={a.dimension} /></div>
                     {a.participants && <p className="mt-1 truncate text-xs text-slate-600">{a.participants}</p>}
-                    <div className="mt-2 flex justify-between text-xs text-slate-500">
-                      <span>{a.owner}</span>
-                      <span>{a.value}</span>
+                    <div className="mt-2 flex justify-between gap-2 text-xs text-slate-500">
+                      <span className="truncate" title={a.owner}>{a.owner}</span>
+                      <span className="shrink-0">{a.value}</span>
                     </div>
                     {a.clients > 0 && (
                       <p className="mt-1 text-xs text-emerald-700">{a.clients} {a.clients === 1 ? "cliente" : "clientes"}</p>
@@ -174,16 +175,12 @@ function QuickEdit({ card, users, onClose }: { card: KanbanCard; users: User[]; 
             </select>
           </label>
           <label>
-            <span className="label">Responsable</span>
-            <select name="ownerId" defaultValue={card.ownerId} className="input">
-              <option value="">Sin asignar</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          </label>
-          <label className="sm:col-span-2">
             <span className="label">Valor esperado (USD)</span>
             <input name="expectedValue" inputMode="decimal" defaultValue={card.expectedValue} placeholder="0" className="input" />
           </label>
+          <div className="sm:col-span-2">
+            <OwnersPicker users={users} defaultValue={card.ownerIds} />
+          </div>
           <label>
             <span className="label">Inicio</span>
             <input name="startDate" type="date" defaultValue={card.startDate} className="input" />

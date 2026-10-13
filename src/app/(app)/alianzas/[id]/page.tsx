@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CommitmentRow } from "@/components/commitment-row";
 import { OfferingsSection } from "@/components/offerings-section";
+import { OwnersPicker } from "@/components/owners-picker";
 import { ClientsSection } from "./clients-section";
 import { PageHeader } from "@/components/page-header";
 import { ProgressBar } from "@/components/progress-bar";
 import { db } from "@/lib/db";
+import { ownerNames, ownersSelect } from "@/lib/owners";
 import { dateInput, fmtDate, fmtUsd } from "@/lib/format";
 import {
   ALLIANCE_STAGES,
@@ -39,7 +41,7 @@ export default async function AlliancePage({
     where: { id },
     include: {
       country: true,
-      owner: { select: { name: true } },
+      ...ownersSelect,
       participants: {
         orderBy: { organization: { name: "asc" } },
         include: {
@@ -54,7 +56,7 @@ export default async function AlliancePage({
       },
       commitments: {
         orderBy: [{ status: "asc" }, { dueDate: "asc" }],
-        include: { owner: { select: { name: true } } },
+        include: ownersSelect,
       },
       opportunities: { orderBy: { createdAt: "desc" } },
       initiatives: { orderBy: { name: "asc" }, select: { id: true, name: true, progress: true } },
@@ -116,7 +118,7 @@ export default async function AlliancePage({
                 {HEALTH[alliance.health]}
               </span>
             </Field>
-            <Field label="Responsable">{alliance.owner?.name ?? "Sin asignar"}</Field>
+            <Field label={alliance.owners.length > 1 ? "Responsables" : "Responsable"}>{ownerNames(alliance.owners, "Sin asignar")}</Field>
             <Field label="Valor esperado">{fmtUsd(alliance.expectedValue) || "Sin estimar"}</Field>
             <Field label="Inicio">{fmtDate(alliance.startDate) || "Sin fecha"}</Field>
             <Field label="Renovación">{fmtDate(alliance.renewalDate) || "Sin fecha"}</Field>
@@ -229,10 +231,7 @@ export default async function AlliancePage({
               <select name="party" defaultValue="NOSOTROS" className="input">
                 {Object.entries(COMMITMENT_PARTIES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
-              <select name="ownerId" defaultValue="" className="input">
-                <option value="">Responsable</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              <OwnersPicker users={users} label="" placeholder="Responsable" />
               <input name="dueDate" type="date" className="input" />
               <button className="btn-secondary">Agregar</button>
             </form>
@@ -269,10 +268,7 @@ export default async function AlliancePage({
                     <select name="commitmentParty" defaultValue="NOSOTROS" className="input">
                       {Object.entries(COMMITMENT_PARTIES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
-                    <select name="commitmentOwnerId" defaultValue="" className="input">
-                      <option value="">Responsable</option>
-                      {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                    </select>
+                    <OwnersPicker users={users} label="" name="commitmentOwnerIds" placeholder="Responsable" />
                     <input name="commitmentDueDate" type="date" className="input" />
                   </div>
                 </div>

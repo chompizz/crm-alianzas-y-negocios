@@ -10,6 +10,7 @@ import { dimensionSummary } from "@/lib/dimension-summary";
 import { importData, importSchema } from "@/lib/mcp/import";
 import { convertInitiative, convertOpportunity, salesFlowSummary } from "@/lib/sales-flow";
 import { db } from "@/lib/db";
+import { connectOwners, ownersSelect, setOwners } from "@/lib/owners";
 import { parseDate, startOfTodayUtc } from "@/lib/format";
 import {
   ALLIANCE_STAGES,
@@ -41,6 +42,13 @@ async function resolveCountry(input: string) {
   const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
   const countries = await db.country.findMany();
   return countries.find((c) => c.code === input.toUpperCase() || norm(c.name) === norm(input)) ?? null;
+}
+
+// Ids de usuario existentes, sin repetir; null si alguno no existe.
+async function validUsers(ids: string[]) {
+  const unique = [...new Set(ids)];
+  const found = await db.user.count({ where: { id: { in: unique } } });
+  return found === unique.length ? unique : null;
 }
 
 function buildServer(user: User) {
@@ -137,7 +145,7 @@ function buildServer(user: User) {
       const initiatives = await db.initiative.findMany({
         where: dimension ? { dimension } : {},
         orderBy: { updatedAt: "desc" },
-        include: { owner: { select: { name: true } }, alliances: { select: { name: true } } },
+        include: { ...ownersSelect, alliances: { select: { name: true } } },
       });
       return json(
         initiatives.map((i) => ({
@@ -146,7 +154,7 @@ function buildServer(user: User) {
           dimension: DIMENSIONS[i.dimension],
           objetivo: i.objective,
           avance: i.progress,
-          responsable: i.owner?.name ?? null,
+          responsables: i.owners.map((o) => o.name),
           alianzas: i.alliances.map((a) => a.name),
         })),
       );
@@ -320,7 +328,7 @@ function buildServer(user: User) {
         take: 50,
         include: {
           country: true,
-          owner: { select: { name: true } },
+          ...ownersSelect,
           participants: { include: { organization: { select: { name: true } } } },
         },
       });
@@ -333,7 +341,7 @@ function buildServer(user: User) {
           dimension: DIMENSIONS[a.dimension],
           etapa: ALLIANCE_STAGES[a.stage],
           salud: HEALTH[a.health],
-          responsable: a.owner?.name ?? null,
+          responsables: a.owners.map((o) => o.name),
           valorEsperadoUSD: a.expectedValue ? Number(a.expectedValue) : null,
           participantes: a.participants.map((p) => p.organization.name),
         })),
@@ -354,10 +362,10 @@ function buildServer(user: User) {
         where: { id },
         include: {
           country: true,
-          owner: { select: { name: true } },
+          ...ownersSelect,
           participants: { include: { organization: { select: { id: true, name: true } } } },
           interactions: { orderBy: { date: "desc" }, take: 10, include: { contacts: { select: { name: true } } } },
-          commitments: { orderBy: { dueDate: "asc" }, include: { owner: { select: { name: true } } } },
+          commitments: { orderBy: { dueDate: "asc" }, include: ownersSelect },
           opportunities: true,
           initiatives: { select: { id: true, name: true, progress: true } },
           offerings: true,
@@ -374,7 +382,7 @@ function buildServer(user: User) {
         etapa: ALLIANCE_STAGES[a.stage],
         salud: HEALTH[a.health],
         objetivos: a.objectives,
-        responsable: a.owner?.name ?? null,
+        responsables: a.owners.map((o) => o.name),
         valorEsperadoUSD: a.expectedValue ? Number(a.expectedValue) : null,
         inicio: day(a.startDate),
         renovacion: day(a.renewalDate),
@@ -404,7 +412,7 @@ function buildServer(user: User) {
           id: c.id,
           descripcion: c.description,
           parte: COMMITMENT_PARTIES[c.party],
-          responsable: c.owner?.name ?? null,
+          responsables: c.owners.map((o) => o.name),
           fecha: day(c.dueDate),
           estado: COMMITMENT_STATUSES[c.status],
         })),
@@ -435,11 +443,14 @@ function buildServer(user: User) {
         objetivos: z.string().optional(),
         valorEsperadoUSD: z.number().nonnegative().optional(),
         organizaciones: z.array(z.string()).optional().describe("Ids de organizaciones participantes"),
+        responsables: z.array(z.string()).optional().describe("Ids de usuario (listar_usuarios); por defecto quien usa el conector"),
       },
     },
-    async ({ nombre, pais, tipo, etapa, dimension, objetivos, valorEsperadoUSD, organizaciones = [] }) => {
+    async ({ nombre, pais, tipo, etapa, dimension, objetivos, valorEsperadoUSD, organizaciones = [], responsables }) => {
       const country = await resolveCountry(pais);
       if (!country) return fail(`No encontré el país "${pais}".`);
+      const owners = responsables ? await validUsers(responsables) : [user.id];
+      if (!owners) return fail("Algún responsable no existe (ver listar_usuarios).");
       const a = await db.alliance.create({
         data: {
           name: nombre,
@@ -449,7 +460,7 @@ function buildServer(user: User) {
           dimension: dimension ?? "ESTRATEGIA",
           objectives: objetivos,
           expectedValue: valorEsperadoUSD,
-          ownerId: user.id,
+          owners: connectOwners(owners),
           participants: { create: organizaciones.map((organizationId) => ({ organizationId })) },
         },
       });
@@ -462,7 +473,7 @@ function buildServer(user: User) {
     {
       title: "Actualizar alianza",
       description:
-        "Cambia la etapa, la salud, la dimensión, el valor esperado, el responsable, las fechas o los objetivos de una alianza. " +
+        "Cambia la etapa, la salud, la dimensión, el valor esperado, los responsables, las fechas o los objetivos de una alianza. " +
         "Al pasar a ACTIVA, si no tenía fecha de inicio toma la de hoy.",
       inputSchema: {
         id: z.string(),
@@ -471,17 +482,19 @@ function buildServer(user: User) {
         dimension: dimension().optional(),
         valorEsperadoUSD: z.number().nonnegative().optional(),
         objetivos: z.string().optional(),
-        responsableId: z.string().nullable().optional().describe("Id de usuario (listar_usuarios); null para quitarlo"),
+        responsables: z
+          .array(z.string())
+          .optional()
+          .describe("Ids de usuario (listar_usuarios); reemplaza la lista completa, [] la vacía. Para sumar o quitar uno usá asignar_responsables"),
         inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("AAAA-MM-DD; null para borrarla"),
         renovacion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("AAAA-MM-DD; null para borrarla"),
       },
     },
-    async ({ id, etapa, salud, dimension, valorEsperadoUSD, objetivos, responsableId, inicio, renovacion }) => {
+    async ({ id, etapa, salud, dimension, valorEsperadoUSD, objetivos, responsables, inicio, renovacion }) => {
       const current = await db.alliance.findUnique({ where: { id }, select: { startDate: true } });
       if (!current) return fail("No existe esa alianza.");
-      if (responsableId && !(await db.user.findUnique({ where: { id: responsableId }, select: { id: true } }))) {
-        return fail("No existe ese usuario.");
-      }
+      const owners = responsables ? await validUsers(responsables) : undefined;
+      if (owners === null) return fail("Algún responsable no existe (ver listar_usuarios).");
       const date = (v: string | null | undefined) => (v === undefined ? undefined : parseDate(v));
       const startDate = date(inicio);
       const a = await db.alliance.update({
@@ -493,11 +506,11 @@ function buildServer(user: User) {
           dimension,
           expectedValue: valorEsperadoUSD,
           objectives: objetivos,
-          ownerId: responsableId,
+          ...(owners ? { owners: setOwners(owners) } : {}),
           ...(startDate !== undefined ? { startDate } : {}),
           renewalDate: date(renovacion),
         },
-        include: { owner: { select: { name: true } } },
+        include: ownersSelect,
       });
       return json({
         actualizada: true,
@@ -506,7 +519,7 @@ function buildServer(user: User) {
         salud: HEALTH[a.health],
         dimension: DIMENSIONS[a.dimension],
         valorEsperadoUSD: a.expectedValue ? Number(a.expectedValue) : null,
-        responsable: a.owner?.name ?? null,
+        responsables: a.owners.map((o) => o.name),
         inicio: day(a.startDate),
         renovacion: day(a.renewalDate),
       });
@@ -529,6 +542,7 @@ function buildServer(user: User) {
               descripcion: z.string(),
               parte: z.enum(keys(COMMITMENT_PARTIES)).optional().describe("NOSOTROS o SOCIO"),
               fecha: z.string().optional().describe("Fecha límite AAAA-MM-DD"),
+              responsables: z.array(z.string()).optional().describe("Ids de usuario; por defecto quien usa el conector (solo si la parte es NOSOTROS)"),
             }),
           )
           .optional(),
@@ -537,6 +551,12 @@ function buildServer(user: User) {
     async ({ alianzaId, resumen, fecha, tipo, compromisos = [] }) => {
       const exists = await db.alliance.findUnique({ where: { id: alianzaId }, select: { id: true } });
       if (!exists) return fail("No existe esa alianza.");
+      const owners: string[][] = [];
+      for (const c of compromisos) {
+        const ids = (c.parte ?? "NOSOTROS") !== "NOSOTROS" ? [] : c.responsables ? await validUsers(c.responsables) : [user.id];
+        if (!ids) return fail(`Algún responsable de "${c.descripcion}" no existe (ver listar_usuarios).`);
+        owners.push(ids);
+      }
       const interaction = await db.interaction.create({
         data: {
           allianceId: alianzaId,
@@ -545,11 +565,11 @@ function buildServer(user: User) {
           type: tipo ?? "REUNION",
           summary: resumen,
           commitments: {
-            create: compromisos.map((c) => ({
+            create: compromisos.map((c, i) => ({
               allianceId: alianzaId,
               description: c.descripcion,
               party: c.parte ?? "NOSOTROS",
-              ownerId: (c.parte ?? "NOSOTROS") === "NOSOTROS" ? user.id : null,
+              owners: connectOwners(owners[i]),
               dueDate: parseDate(c.fecha ?? null),
             })),
           },
@@ -579,14 +599,14 @@ function buildServer(user: User) {
         where: {
           ...(vista !== "todos" ? { status: "PENDIENTE" as const } : {}),
           ...(vista === "vencidos" ? { dueDate: { lt: startOfTodayUtc() } } : {}),
-          ...(soloMios ? { ownerId: user.id } : {}),
+          ...(soloMios ? { owners: { some: { id: user.id } } } : {}),
           ...(country
             ? { OR: [{ alliance: { countryCode: country.code } }, { initiative: { alliances: { some: { countryCode: country.code } } } }] }
             : {}),
         },
         orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
         take: 100,
-        include: { owner: { select: { name: true } }, alliance: { select: { id: true, name: true } }, initiative: { select: { id: true, name: true } } },
+        include: { ...ownersSelect, alliance: { select: { id: true, name: true } }, initiative: { select: { id: true, name: true } } },
       });
       return json(
         commitments.map((c) => ({
@@ -595,7 +615,7 @@ function buildServer(user: User) {
           alianza: c.alliance?.name ?? null,
           iniciativa: c.initiative?.name ?? null,
           parte: COMMITMENT_PARTIES[c.party],
-          responsable: c.owner?.name ?? null,
+          responsables: c.owners.map((o) => o.name),
           fecha: day(c.dueDate),
           estado: COMMITMENT_STATUSES[c.status],
         })),
@@ -1220,6 +1240,40 @@ function buildServer(user: User) {
         });
       } catch (e) {
         return fail((e as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    "asignar_responsables",
+    {
+      title: "Asignar responsables internos",
+      description:
+        "Suma, quita o reemplaza los responsables internos de una alianza, iniciativa o compromiso (pueden ser varios). " +
+        "Los ids de usuario salen de listar_usuarios.",
+      inputSchema: {
+        tipo: z.enum(["alianza", "iniciativa", "compromiso"]),
+        id: z.string(),
+        responsables: z.array(z.string()).describe("Ids de usuario"),
+        modo: z.enum(["agregar", "quitar", "reemplazar"]).optional().describe("Por defecto agregar"),
+      },
+    },
+    async ({ tipo, id, responsables, modo = "agregar" }) => {
+      const ids = await validUsers(responsables);
+      if (!ids) return fail("Algún responsable no existe (ver listar_usuarios).");
+      const owners =
+        modo === "reemplazar" ? setOwners(ids) : modo === "quitar" ? { disconnect: ids.map((u) => ({ id: u })) } : connectOwners(ids);
+      const args = { where: { id }, data: { owners }, select: { id: true, ...ownersSelect } };
+      try {
+        const r =
+          tipo === "alianza"
+            ? await db.alliance.update(args)
+            : tipo === "iniciativa"
+              ? await db.initiative.update(args)
+              : await db.commitment.update(args);
+        return json({ actualizado: true, tipo, id: r.id, responsables: r.owners.map((o) => o.name) });
+      } catch {
+        return fail(`No encontré ${tipo === "compromiso" ? "ese compromiso" : `esa ${tipo}`}.`);
       }
     },
   );
