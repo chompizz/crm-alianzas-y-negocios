@@ -2,9 +2,11 @@ import Link from "next/link";
 import type { AllianceStage } from "@prisma/client";
 import { AllianceMap } from "@/components/alliance-map";
 import { PageHeader } from "@/components/page-header";
+import { SalesFlowDiagram } from "@/components/sales-flow-diagram";
 import { revenueByCountry } from "@/lib/country-revenue";
 import { dimensionSummary } from "@/lib/dimension-summary";
 import { db } from "@/lib/db";
+import { salesFlowSummary } from "@/lib/sales-flow";
 import { fmtDate, fmtUsdCompact, startOfTodayUtc } from "@/lib/format";
 import { ALLIANCE_STAGES, DIMENSION_STYLE, DIMENSIONS, HEALTH_DOT } from "@/lib/labels";
 
@@ -36,7 +38,7 @@ export default async function DashboardPage() {
     select: { estimatedValue: true, probability: true },
   });
   const weightedPipeline = openOpportunities.reduce((s, o) => s + Number(o.estimatedValue ?? 0) * ((o.probability ?? 0) / 100), 0);
-  const [countryRevenue, dimensions] = await Promise.all([revenueByCountry(), dimensionSummary()]);
+  const [countryRevenue, dimensions, salesFlow] = await Promise.all([revenueByCountry(), dimensionSummary(), salesFlowSummary()]);
   const overdueTotal = await db.commitment.count({ where: { status: "PENDIENTE", dueDate: { lt: today } } });
   const multiCountry = orgCountryCounts.filter((o) => o._count.countries > 1).length;
 
@@ -59,7 +61,11 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Tablero" subtitle="Portafolio de alianzas" />
+      <PageHeader
+        title="Tablero"
+        subtitle="Portafolio de alianzas"
+        actions={<Link href="/flujo-ventas" className="btn-primary">Flujo de ventas</Link>}
+      />
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Stat label="Alianzas abiertas" value={String(alliances.length)} hint={`${active} activas`} href="/alianzas" />
         <Stat label="Valor esperado" value={fmtUsdCompact(expected)} hint="alianzas abiertas" href="/alianzas" />
@@ -83,6 +89,8 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </section>
+
+      <SalesFlowDiagram data={salesFlow} />
 
       <AllianceMap data={countryRevenue} />
 

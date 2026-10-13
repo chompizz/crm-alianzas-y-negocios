@@ -8,6 +8,7 @@ import { userForToken } from "@/lib/api-tokens";
 import { revenueByCountry } from "@/lib/country-revenue";
 import { dimensionSummary } from "@/lib/dimension-summary";
 import { importData, importSchema } from "@/lib/mcp/import";
+import { convertInitiative, convertOpportunity, salesFlowSummary } from "@/lib/sales-flow";
 import { db } from "@/lib/db";
 import { parseDate, startOfTodayUtc } from "@/lib/format";
 import {
@@ -51,7 +52,8 @@ function buildServer(user: User) {
         "una organización puede operar en varios países y pertenecer a un grupo (casa matriz con filiales). Cada organización participa en una alianza con un rol " +
         "(líder, socio, proveedor, cliente, canal, integrador, financiador, institucional u otro). El catálogo guarda productos, servicios y otros, " +
         "que se asignan a organizaciones (lo que ofrecen) y a alianzas (lo que se vende o entrega). Cada alianza puede tener muchos clientes, " +
-        "con estado (prospecto, activo, inactivo) y facturación anual. Usá las herramientas de lectura antes de crear registros " +
+        "con estado (prospecto, activo, inactivo) y facturación anual. El flujo de ventas va de iniciativa a oportunidad y de oportunidad ganada a cliente " +
+        "(convertir_iniciativa_en_oportunidad, convertir_oportunidad_en_cliente, resumen_flujo_ventas). Usá las herramientas de lectura antes de crear registros " +
         "para no duplicar, y confirmá con la persona antes de crear o modificar datos. Fechas en formato AAAA-MM-DD. " +
         "Para cargar información que la persona pega o sube (texto, notas de reunión, planillas, PDF), extraé los datos y usá importar_datos: " +
         "primero con simular=true para mostrarle qué se va a crear, y después de su confirmación con simular=false. " +
@@ -1108,6 +1110,117 @@ function buildServer(user: User) {
     async ({ alianzaId, organizacionId }) => {
       const r = await db.allianceClient.deleteMany({ where: { allianceId: alianzaId, organizationId: organizacionId } });
       return r.count ? json({ ok: true }) : fail("Esa organización no es cliente de esa alianza.");
+    },
+  );
+
+  server.registerTool(
+    "resumen_flujo_ventas",
+    {
+      title: "Resumen del flujo de ventas",
+      description: "Métricas de iniciativa → oportunidad → cliente: cantidades, valores y tasas de conversión.",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const f = await salesFlowSummary();
+      return json({
+        iniciativas: { total: f.initiatives.total, conOportunidad: f.initiatives.converted, sinConvertir: f.initiatives.pending },
+        oportunidades: {
+          abiertas: f.opportunities.open,
+          valorAbiertoUSD: f.opportunities.openValue,
+          valorPonderadoUSD: Math.round(f.opportunities.weighted),
+          ganadas: f.opportunities.won,
+          valorGanadoUSD: f.opportunities.wonValue,
+          descartadas: f.opportunities.lost,
+          nacidasDeIniciativas: f.opportunities.fromInitiatives,
+        },
+        clientes: {
+          total: f.clients.total,
+          activos: f.clients.active,
+          prospectos: f.clients.prospects,
+          inactivos: f.clients.inactive,
+          facturacionAnualActivosUSD: f.clients.revenue,
+          nacidosDeOportunidades: f.clients.fromOpportunities,
+        },
+        tasas: {
+          iniciativaAOportunidadPct: f.rates.initiativeToOpportunity,
+          oportunidadesGanadasPct: f.rates.winRate,
+          clientesActivosPct: f.rates.activeClients,
+        },
+      });
+    },
+  );
+
+  server.registerTool(
+    "convertir_iniciativa_en_oportunidad",
+    {
+      title: "Convertir iniciativa en oportunidad",
+      description: "Crea una oportunidad a partir de una iniciativa, en la alianza indicada, y deja registrado de qué iniciativa nació.",
+      inputSchema: {
+        iniciativaId: z.string(),
+        alianzaId: z.string(),
+        titulo: z.string().optional().describe("Por defecto, el nombre de la iniciativa"),
+        valorEstimadoUSD: z.number().nonnegative().optional(),
+        probabilidad: z.number().int().min(0).max(100).optional(),
+        dimension: dimension().optional().describe("Por defecto VENTAS"),
+      },
+    },
+    async ({ iniciativaId, alianzaId, titulo, valorEstimadoUSD, probabilidad, dimension }) => {
+      try {
+        const o = await convertInitiative({
+          initiativeId: iniciativaId,
+          allianceId: alianzaId,
+          title: titulo,
+          value: valorEstimadoUSD,
+          probability: probabilidad,
+          dimension,
+        });
+        return json({ creada: true, oportunidadId: o.id, titulo: o.title });
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    "convertir_oportunidad_en_cliente",
+    {
+      title: "Convertir oportunidad en cliente",
+      description:
+        "Marca la oportunidad como ganada y suma el cliente a su alianza. Pasá organizacionId de una organización existente " +
+        "o nombreNuevo para crearla. La facturación anual toma por defecto el valor estimado de la oportunidad.",
+      inputSchema: {
+        oportunidadId: z.string(),
+        organizacionId: z.string().optional(),
+        nombreNuevo: z.string().optional(),
+        estado: z.enum(keys(CLIENT_STATUSES)).optional().describe("Por defecto ACTIVO"),
+        facturacionAnualUSD: z.number().nonnegative().optional(),
+        desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("AAAA-MM-DD; por defecto hoy"),
+      },
+    },
+    async ({ oportunidadId, organizacionId, nombreNuevo, estado, facturacionAnualUSD, desde }) => {
+      if (!organizacionId === !nombreNuevo) return fail("Indicá organizacionId o nombreNuevo (uno solo).");
+      if (organizacionId && !(await db.organization.findUnique({ where: { id: organizacionId }, select: { id: true } }))) {
+        return fail("No existe esa organización.");
+      }
+      try {
+        const c = await convertOpportunity({
+          opportunityId: oportunidadId,
+          organizationId: organizacionId,
+          newName: nombreNuevo,
+          status: estado,
+          revenue: facturacionAnualUSD,
+          since: desde ? parseDate(desde) : null,
+        });
+        return json({
+          ok: true,
+          clienteId: c.id,
+          cliente: c.organization.name,
+          estado: CLIENT_STATUSES[c.status],
+          facturacionAnualUSD: c.revenue ? Number(c.revenue) : null,
+        });
+      } catch (e) {
+        return fail((e as Error).message);
+      }
     },
   );
 

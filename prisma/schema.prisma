@@ -197,6 +197,8 @@ model AllianceClient {
   since          DateTime?
   notes          String?
   offerings      Offering[] // lo que compra
+  opportunityId  String?       @unique // oportunidad ganada que lo originó
+  opportunity    Opportunity?  @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -258,6 +260,10 @@ model Opportunity {
   dimension      Dimension         @default(VENTAS)
   allianceId     String
   alliance       Alliance          @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  // Flujo de ventas: iniciativa de la que nació y cliente en el que se convirtió.
+  initiativeId   String?
+  initiative     Initiative?       @relation(fields: [initiativeId], references: [id], onDelete: SetNull)
+  client         AllianceClient?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 }
@@ -277,9 +283,10 @@ model Initiative {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  milestones   Milestone[]
-  interactions Interaction[]
-  commitments  Commitment[]
+  milestones    Milestone[]
+  interactions  Interaction[]
+  commitments   Commitment[]
+  opportunities Opportunity[]
 }
 
 model Milestone {
