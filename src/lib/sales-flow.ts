@@ -55,7 +55,10 @@ export async function convertOpportunity(input: {
   if (!opp) throw new Error("No existe esa oportunidad");
 
   let organizationId = input.organizationId || null;
-  const name = input.newName?.trim();
+  // Si vino de un partner y no se eligió cliente, se usa el cliente que registró el partner.
+  const name =
+    input.newName?.trim() ||
+    (!organizationId ? (await db.dealRegistration.findUnique({ where: { opportunityId: opp.id }, select: { clientName: true } }))?.clientName : null);
   if (!organizationId && name) {
     const existing = await db.organization.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { id: true } });
     organizationId =

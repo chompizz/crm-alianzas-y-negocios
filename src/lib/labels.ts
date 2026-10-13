@@ -35,6 +35,10 @@ export const HEALTH = { VERDE: "Verde", AMARILLO: "Amarillo", ROJO: "Rojo" } as 
 
 export const ROLES = { ADMIN: "Administrador", MEMBER: "Miembro" } as const;
 
+export const ROLE_LABELS = { ...ROLES, PARTNER: "Partner" } as const;
+
+export const REGISTRATION_STATUSES = { PENDIENTE: "Pendientes", APROBADA: "Aprobadas", RECHAZADA: "Rechazadas" } as const;
+
 export const INTERACTION_TYPES = {
   REUNION: "Reunión",
   LLAMADA: "Llamada",

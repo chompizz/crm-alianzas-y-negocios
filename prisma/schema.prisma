@@ -12,23 +12,32 @@ datasource db {
 enum Role {
   ADMIN
   MEMBER
+  // Cuenta de un partner: solo entra al portal de partners.
+  PARTNER
 }
 
 model User {
-  id                 String   @id @default(cuid())
-  email              String   @unique
+  id                 String        @id @default(cuid())
+  email              String        @unique
   name               String
   passwordHash       String
-  role               Role     @default(MEMBER)
+  role               Role          @default(MEMBER)
   // Avisos por email cuando otra persona cambia algo de lo que es responsable.
-  emailNotifications Boolean  @default(true)
-  createdAt          DateTime @default(now())
+  emailNotifications Boolean       @default(true)
+  // Cuentas desactivadas no pueden entrar.
+  active             Boolean       @default(true)
+  // Solo para PARTNER: la organización partner a la que pertenece la cuenta.
+  organizationId     String?
+  organization       Organization? @relation("PartnerAccount", fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt          DateTime      @default(now())
 
-  alliances    Alliance[]    @relation("AllianceOwner")
-  initiatives  Initiative[]  @relation("InitiativeOwner")
-  commitments  Commitment[]  @relation("CommitmentOwner")
-  interactions Interaction[] @relation("InteractionAuthor")
-  apiTokens    ApiToken[]
+  alliances             Alliance[]         @relation("AllianceOwner")
+  initiatives           Initiative[]       @relation("InitiativeOwner")
+  commitments           Commitment[]       @relation("CommitmentOwner")
+  interactions          Interaction[]      @relation("InteractionAuthor")
+  apiTokens             ApiToken[]
+  registrations         DealRegistration[] @relation("RegistrationCreator")
+  reviewedRegistrations DealRegistration[] @relation("RegistrationReviewer")
 }
 
 // Token personal para conectar Nexo a Claude (u otro cliente MCP).
@@ -83,11 +92,15 @@ model Organization {
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
-  contacts       Contact[]
-  participations AllianceParticipant[]
-  initiatives    Initiative[]
-  offerings      Offering[]
-  clientOf       AllianceClient[]
+  contacts             Contact[]
+  participations       AllianceParticipant[]
+  initiatives          Initiative[]
+  offerings            Offering[]
+  clientOf             AllianceClient[]
+  // Como partner: cuentas de acceso al portal, registros y oportunidades que trajo.
+  partnerAccounts      User[]                @relation("PartnerAccount")
+  partnerRegistrations DealRegistration[]
+  partnerOpportunities Opportunity[]         @relation("OpportunityPartner")
 }
 
 enum RelationshipLevel {
@@ -169,6 +182,7 @@ model Alliance {
   clients       AllianceClient[]
   offerings     Offering[]
   opportunities Opportunity[]
+  registrations DealRegistration[]
   initiatives   Initiative[]
   interactions  Interaction[]
   commitments   Commitment[]
@@ -265,8 +279,50 @@ model Opportunity {
   initiativeId   String?
   initiative     Initiative?       @relation(fields: [initiativeId], references: [id], onDelete: SetNull)
   client         AllianceClient?
+  // Partner que trajo la oportunidad (registro aprobado desde el portal).
+  partnerId      String?
+  partner        Organization?     @relation("OpportunityPartner", fields: [partnerId], references: [id], onDelete: SetNull)
+  registration   DealRegistration?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+}
+
+// ---------- Portal de partners ----------
+
+enum RegistrationStatus {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+// Oportunidad que un partner registra desde el portal; se aprueba internamente.
+model DealRegistration {
+  id                String             @id @default(cuid())
+  title             String
+  clientName        String
+  clientCountryCode String?
+  clientContact     String?
+  clientEmail       String?
+  estimatedValue    Decimal?           @db.Decimal(14, 2) // USD
+  expectedCloseDate DateTime?
+  notes             String?
+  status            RegistrationStatus @default(PENDIENTE)
+  rejectionReason   String?
+  // Aviso interno (no lo ve el partner): cliente existente o registrado por otro partner.
+  conflict          String?
+  allianceId        String
+  alliance          Alliance           @relation(fields: [allianceId], references: [id], onDelete: Cascade)
+  partnerId         String
+  partner           Organization       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  createdById       String?
+  createdBy         User?              @relation("RegistrationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  reviewedById      String?
+  reviewedBy        User?              @relation("RegistrationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt        DateTime?
+  opportunityId     String?            @unique
+  opportunity       Opportunity?       @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 }
 
 // ---------- Iniciativas ----------

@@ -23,7 +23,7 @@ export default async function OpportunitiesPage({
     db.opportunity.findMany({
       where,
       orderBy: [{ estimatedValue: { sort: "desc", nulls: "last" } }],
-      include: { alliance: { select: { id: true, name: true, country: { select: { name: true } } } } },
+      include: { alliance: { select: { id: true, name: true, country: { select: { name: true } } } }, partner: { select: { id: true, name: true } } },
     }),
     db.country.findMany({ where: { alliances: { some: {} } }, orderBy: { name: "asc" } }),
   ]);
@@ -62,7 +62,10 @@ export default async function OpportunitiesPage({
           <tbody>
             {opportunities.map((o) => (
               <tr key={o.id} className="hover:bg-slate-50">
-                <td><Link href={`/oportunidades/${o.id}/editar`} className="font-medium text-indigo-700 hover:underline">{o.title}</Link></td>
+                <td>
+                  <Link href={`/oportunidades/${o.id}/editar`} className="font-medium text-indigo-700 hover:underline">{o.title}</Link>
+                  {o.partner && <p className="text-xs text-slate-500">Traída por {o.partner.name}</p>}
+                </td>
                 <td><DimensionBadge dimension={o.dimension} /></td>
                 <td><Link href={`/alianzas/${o.alliance.id}`} className="hover:underline">{o.alliance.name}</Link></td>
                 <td>{o.alliance.country.name}</td>

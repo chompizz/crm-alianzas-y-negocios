@@ -19,7 +19,7 @@ export async function issueToken(userId: string, name: string) {
 export async function userForToken(token: string | null | undefined) {
   if (!token || !token.startsWith(PREFIX)) return null;
   const record = await db.apiToken.findUnique({ where: { tokenHash: hashToken(token) }, include: { user: true } });
-  if (!record || record.revokedAt) return null;
+  if (!record || record.revokedAt || !record.user.active || record.user.role === "PARTNER") return null;
   await db.apiToken.update({ where: { id: record.id }, data: { lastUsedAt: new Date() } });
   return record.user;
 }

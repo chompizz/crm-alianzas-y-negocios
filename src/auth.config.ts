@@ -6,8 +6,15 @@ export const authConfig = {
   session: { strategy: "jwt" },
   providers: [],
   callbacks: {
-    authorized({ auth }) {
-      return !!auth?.user;
+    // Los partners solo entran al portal; el equipo interno no usa el portal.
+    authorized({ auth, request }) {
+      if (!auth?.user) return false;
+      const path = request.nextUrl.pathname;
+      const inPortal = path === "/portal" || path.startsWith("/portal/");
+      const isPartner = (auth.user as { role?: string }).role === "PARTNER";
+      if (isPartner && !inPortal) return Response.redirect(new URL("/portal", request.nextUrl));
+      if (!isPartner && inPortal) return Response.redirect(new URL("/", request.nextUrl));
+      return true;
     },
     jwt({ token, user }) {
       if (user) {

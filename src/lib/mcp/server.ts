@@ -9,7 +9,16 @@ import { revenueByCountry } from "@/lib/country-revenue";
 import { dimensionSummary } from "@/lib/dimension-summary";
 import { importData, importSchema } from "@/lib/mcp/import";
 import { convertInitiative, convertOpportunity, salesFlowSummary } from "@/lib/sales-flow";
-import { db } from "@/lib/db";
+import {
+  approveRegistration,
+  createPartnerAccount,
+  deletePartnerAccount,
+  partnerAccount,
+  registrationStage,
+  rejectRegistration,
+  updatePartnerAccount,
+} from "@/lib/partners";
+import { db, INTERNAL_USERS } from "@/lib/db";
 import { notify, notifyNewOwners } from "@/lib/notify";
 import { connectOwners, ownersSelect, setOwners } from "@/lib/owners";
 import { parseDate, startOfTodayUtc } from "@/lib/format";
@@ -27,6 +36,8 @@ import {
   OPPORTUNITY_STATUSES,
   ORGANIZATION_TYPES,
   PARTICIPANT_ROLES,
+  REGISTRATION_STATUSES,
+  ROLE_LABELS,
   RELATIONSHIP_LEVELS,
   ROLES,
 } from "@/lib/labels";
@@ -49,7 +60,7 @@ async function resolveCountry(input: string) {
 // Ids de usuario existentes, sin repetir; null si alguno no existe.
 async function validUsers(ids: string[]) {
   const unique = [...new Set(ids)];
-  const found = await db.user.count({ where: { id: { in: unique } } });
+  const found = await db.user.count({ where: { id: { in: unique }, ...INTERNAL_USERS } });
   return found === unique.length ? unique : null;
 }
 
@@ -371,7 +382,7 @@ function buildServer(user: User) {
           participants: { include: { organization: { select: { id: true, name: true } } } },
           interactions: { orderBy: { date: "desc" }, take: 10, include: { contacts: { select: { name: true } } } },
           commitments: { orderBy: { dueDate: "asc" }, include: ownersSelect },
-          opportunities: true,
+          opportunities: { include: { partner: { select: { name: true } } } },
           initiatives: { select: { id: true, name: true, progress: true } },
           offerings: true,
           clients: { include: { organization: { select: { id: true, name: true } } } },
@@ -428,6 +439,7 @@ function buildServer(user: User) {
           probabilidad: o.probability,
           estado: o.status,
           dimension: DIMENSIONS[o.dimension],
+          traidaPor: o.partner?.name ?? null,
         })),
         iniciativas: a.initiatives.map((i) => ({ id: i.id, nombre: i.name, avance: i.progress })),
       });
@@ -713,7 +725,7 @@ function buildServer(user: User) {
     },
     async () =>
       json(
-        (await db.user.findMany({ orderBy: { name: "asc" } })).map((u) => ({ id: u.id, nombre: u.name, email: u.email, rol: ROLES[u.role] })),
+        (await db.user.findMany({ where: INTERNAL_USERS, orderBy: { name: "asc" } })).map((u) => ({ id: u.id, nombre: u.name, email: u.email, rol: ROLE_LABELS[u.role] })),
       ),
   );
 
@@ -735,7 +747,7 @@ function buildServer(user: User) {
       const u = await db.user.create({
         data: { name: nombre, email: mail, role: rol ?? "MEMBER", passwordHash: await bcrypt.hash(contrasenaInicial, 10) },
       });
-      return json({ creado: true, id: u.id, email: u.email, rol: ROLES[u.role] });
+      return json({ creado: true, id: u.id, email: u.email, rol: ROLE_LABELS[u.role] });
     },
   );
 
@@ -755,7 +767,7 @@ function buildServer(user: User) {
     async ({ usuarioId, nombre, email, rol, nuevaContrasena }) => {
       const denied = soloAdmin();
       if (denied) return denied;
-      if (!(await db.user.findUnique({ where: { id: usuarioId } }))) return fail("No existe ese usuario.");
+      if (!(await db.user.findUnique({ where: { id: usuarioId, ...INTERNAL_USERS } }))) return fail("No existe ese usuario (las cuentas de partner se gestionan con actualizar_cuenta_partner).");
       if (usuarioId === user.id && rol && rol !== "ADMIN") return fail("No podés quitarte tu propio rol de administrador.");
       const mail = email?.trim().toLowerCase();
       if (mail) {
@@ -771,7 +783,7 @@ function buildServer(user: User) {
           ...(nuevaContrasena ? { passwordHash: await bcrypt.hash(nuevaContrasena, 10) } : {}),
         },
       });
-      return json({ actualizado: true, id: u.id, nombre: u.name, email: u.email, rol: ROLES[u.role] });
+      return json({ actualizado: true, id: u.id, nombre: u.name, email: u.email, rol: ROLE_LABELS[u.role] });
     },
   );
 
@@ -787,7 +799,7 @@ function buildServer(user: User) {
       const denied = soloAdmin();
       if (denied) return denied;
       if (usuarioId === user.id) return fail("No podés eliminar tu propio usuario.");
-      if (!(await db.user.findUnique({ where: { id: usuarioId } }))) return fail("No existe ese usuario.");
+      if (!(await db.user.findUnique({ where: { id: usuarioId, ...INTERNAL_USERS } }))) return fail("No existe ese usuario (las cuentas de partner se gestionan con eliminar_cuenta_partner).");
       await db.user.delete({ where: { id: usuarioId } });
       return json({ eliminado: true, id: usuarioId });
     },
@@ -1266,7 +1278,7 @@ function buildServer(user: User) {
       title: "Convertir oportunidad en cliente",
       description:
         "Marca la oportunidad como ganada y suma el cliente a su alianza. Pasá organizacionId de una organización existente " +
-        "o nombreNuevo para crearla. La facturación anual toma por defecto el valor estimado de la oportunidad.",
+        "o nombreNuevo para crearla (si la trajo un partner y no pasás ninguno, se usa el cliente que registró). La facturación anual toma por defecto el valor estimado de la oportunidad.",
       inputSchema: {
         oportunidadId: z.string(),
         organizacionId: z.string().optional(),
@@ -1277,7 +1289,10 @@ function buildServer(user: User) {
       },
     },
     async ({ oportunidadId, organizacionId, nombreNuevo, estado, facturacionAnualUSD, desde }) => {
-      if (!organizacionId === !nombreNuevo) return fail("Indicá organizacionId o nombreNuevo (uno solo).");
+      if (organizacionId && nombreNuevo) return fail("Indicá organizacionId o nombreNuevo (uno solo).");
+      if (!organizacionId && !nombreNuevo && !(await db.dealRegistration.findUnique({ where: { opportunityId: oportunidadId }, select: { id: true } }))) {
+        return fail("Indicá organizacionId o nombreNuevo.");
+      }
       if (organizacionId && !(await db.organization.findUnique({ where: { id: organizacionId }, select: { id: true } }))) {
         return fail("No existe esa organización.");
       }
@@ -1459,12 +1474,12 @@ function buildServer(user: User) {
     {
       title: "Eliminar registro",
       description:
-        "Elimina una alianza, iniciativa, oportunidad, organización, contacto, ítem del catálogo, compromiso, interacción o hito. " +
+        "Elimina una alianza, iniciativa, oportunidad, organización, contacto, ítem del catálogo, compromiso, interacción, hito o registro de partner. " +
         "Es definitivo: confirmá siempre con la persona antes, diciéndole qué se borra en cascada " +
         "(una alianza borra sus participantes, clientes, oportunidades y compromisos; una iniciativa sus hitos y compromisos; " +
         "una organización sus contactos, participaciones y clientes). Para sacar un cliente o participante de una alianza usá quitar_cliente o quitar_participante.",
       inputSchema: {
-        tipo: z.enum(["alianza", "iniciativa", "oportunidad", "organizacion", "contacto", "oferta", "compromiso", "interaccion", "hito"]),
+        tipo: z.enum(["alianza", "iniciativa", "oportunidad", "organizacion", "contacto", "oferta", "compromiso", "interaccion", "hito", "registro_partner"]),
         id: z.string(),
       },
       annotations: { destructiveHint: true },
@@ -1510,6 +1525,8 @@ function buildServer(user: User) {
             await db.initiative.update({ where: { id: m.initiativeId }, data: { progress } });
             return json({ eliminado: true, tipo, nombre: m.title });
           }
+          case "registro_partner":
+            return json({ eliminado: true, tipo, nombre: (await db.dealRegistration.delete({ ...where, select: { title: true } })).title });
           case "organizacion":
             return json({ eliminado: true, tipo, nombre: (await db.organization.delete({ ...where, select: { name: true } })).name });
           case "contacto":
@@ -1519,6 +1536,196 @@ function buildServer(user: User) {
         }
       } catch {
         return fail(`No encontré ${tipo === "organizacion" ? "esa organización" : tipo === "interaccion" ? "esa interacción" : `ese registro (${tipo})`}.`);
+      }
+    },
+  );
+
+  // ---------- Portal de partners ----------
+
+  server.registerTool(
+    "listar_registros_partner",
+    {
+      title: "Listar registros de partners",
+      description:
+        "Oportunidades que los partners registraron desde su portal, para revisar. Por defecto solo las pendientes. " +
+        "Incluye el aviso de conflicto (cliente existente o registrado por otro partner) y, si se aprobó, la oportunidad creada.",
+      inputSchema: {
+        estado: z.enum([...keys(REGISTRATION_STATUSES), "TODAS"]).optional(),
+        partnerId: z.string().optional().describe("Id de la organización partner"),
+        alianzaId: z.string().optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ estado, partnerId, alianzaId }) => {
+      const status = estado === "TODAS" ? undefined : (estado ?? "PENDIENTE");
+      const rs = await db.dealRegistration.findMany({
+        where: { status, partnerId, allianceId: alianzaId },
+        orderBy: { createdAt: "desc" },
+        include: {
+          alliance: { select: { id: true, name: true } },
+          partner: { select: { id: true, name: true } },
+          createdBy: { select: { name: true, email: true } },
+          reviewedBy: { select: { name: true } },
+          opportunity: { select: { id: true, status: true } },
+        },
+      });
+      return json(
+        rs.map((r) => ({
+          id: r.id,
+          estado: registrationStage(r).label,
+          partner: r.partner,
+          registradoPor: r.createdBy,
+          alianza: r.alliance,
+          cliente: r.clientName,
+          paisCliente: r.clientCountryCode,
+          contacto: [r.clientContact, r.clientEmail].filter(Boolean).join(" · ") || null,
+          titulo: r.title,
+          valorEstimadoUSD: r.estimatedValue ? Number(r.estimatedValue) : null,
+          cierreEsperado: r.expectedCloseDate?.toISOString().slice(0, 10) ?? null,
+          notas: r.notes,
+          conflicto: r.conflict,
+          motivoRechazo: r.rejectionReason,
+          revisadoPor: r.reviewedBy?.name ?? null,
+          oportunidadId: r.opportunity?.id ?? null,
+          fecha: r.createdAt.toISOString().slice(0, 10),
+        })),
+      );
+    },
+  );
+
+  server.registerTool(
+    "aprobar_registro",
+    {
+      title: "Aprobar registro de partner",
+      description:
+        "Aprueba una oportunidad registrada por un partner: crea una oportunidad en la alianza marcada como traída por ese partner y le avisa por email. " +
+        "Se pueden ajustar título, valor y probabilidad. Confirmá con la persona antes.",
+      inputSchema: {
+        registroId: z.string(),
+        titulo: z.string().optional(),
+        valorEstimadoUSD: z.number().nonnegative().optional(),
+        probabilidad: z.number().int().min(0).max(100).optional(),
+      },
+    },
+    async ({ registroId, titulo, valorEstimadoUSD, probabilidad }) => {
+      try {
+        const o = await approveRegistration(registroId, user, { title: titulo, estimatedValue: valorEstimadoUSD, probability: probabilidad });
+        return json({ aprobado: true, oportunidadId: o.id, titulo: o.title });
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : "No se pudo aprobar.");
+      }
+    },
+  );
+
+  server.registerTool(
+    "rechazar_registro",
+    {
+      title: "Rechazar registro de partner",
+      description: "Rechaza una oportunidad registrada por un partner. El motivo es obligatorio y el partner lo ve en su portal y por email.",
+      inputSchema: { registroId: z.string(), motivo: z.string().min(1) },
+    },
+    async ({ registroId, motivo }) => {
+      try {
+        await rejectRegistration(registroId, user, motivo);
+        return json({ rechazado: true, id: registroId });
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : "No se pudo rechazar.");
+      }
+    },
+  );
+
+  const soloAdminPartners = () => (user.role === "ADMIN" ? null : fail("Solo un administrador puede gestionar cuentas de partner."));
+  const cuenta = (u: { id: string; name: string; email: string; active: boolean; organization: { name: string } | null }) => ({
+    id: u.id,
+    nombre: u.name,
+    email: u.email,
+    partner: u.organization?.name ?? null,
+    activa: u.active,
+  });
+
+  server.registerTool(
+    "listar_cuentas_partner",
+    {
+      title: "Listar cuentas de partner",
+      description: "Cuentas de acceso al portal de partners (persona, email, organización partner y si está activa).",
+      inputSchema: { partnerId: z.string().optional().describe("Id de la organización partner") },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ partnerId }) =>
+      json(
+        (
+          await db.user.findMany({
+            where: { role: "PARTNER", organizationId: partnerId },
+            orderBy: [{ organization: { name: "asc" } }, { name: "asc" }],
+            include: { organization: { select: { name: true } } },
+          })
+        ).map(cuenta),
+      ),
+  );
+
+  server.registerTool(
+    "crear_cuenta_partner",
+    {
+      title: "Crear cuenta de partner (admin)",
+      description:
+        "Da acceso al portal de partners a una persona de una organización partner (que participe en alguna alianza). " +
+        "Solo verá las alianzas de su organización y lo que registre. Solo administradores; contraseña inicial de 8 caracteres o más.",
+      inputSchema: { organizacionId: z.string(), nombre: z.string(), email: z.string().email(), contrasenaInicial: z.string().min(8) },
+    },
+    async ({ organizacionId, nombre, email, contrasenaInicial }) => {
+      const denied = soloAdminPartners();
+      if (denied) return denied;
+      try {
+        return json({ creada: true, ...cuenta(await createPartnerAccount({ organizationId: organizacionId, name: nombre, email, password: contrasenaInicial })) });
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : "No se pudo crear la cuenta.");
+      }
+    },
+  );
+
+  server.registerTool(
+    "actualizar_cuenta_partner",
+    {
+      title: "Actualizar cuenta de partner (admin)",
+      description: "Activa o desactiva una cuenta de partner, o cambia su nombre, email, organización o contraseña. Solo administradores.",
+      inputSchema: {
+        cuentaId: z.string(),
+        activa: z.boolean().optional(),
+        nombre: z.string().optional(),
+        email: z.string().email().optional(),
+        organizacionId: z.string().optional(),
+        nuevaContrasena: z.string().min(8).optional(),
+      },
+    },
+    async ({ cuentaId, activa, nombre, email, organizacionId, nuevaContrasena }) => {
+      const denied = soloAdminPartners();
+      if (denied) return denied;
+      try {
+        const u = await updatePartnerAccount(cuentaId, { active: activa, name: nombre, email, organizationId: organizacionId, password: nuevaContrasena });
+        return json({ actualizada: true, ...cuenta(u) });
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : "No se pudo actualizar la cuenta.");
+      }
+    },
+  );
+
+  server.registerTool(
+    "eliminar_cuenta_partner",
+    {
+      title: "Eliminar cuenta de partner (admin)",
+      description: "Borra una cuenta de acceso al portal. Sus registros se mantienen. Para cortar el acceso sin borrar, usá actualizar_cuenta_partner con activa=false.",
+      inputSchema: { cuentaId: z.string() },
+      annotations: { destructiveHint: true },
+    },
+    async ({ cuentaId }) => {
+      const denied = soloAdminPartners();
+      if (denied) return denied;
+      try {
+        const u = await partnerAccount(cuentaId);
+        await deletePartnerAccount(cuentaId);
+        return json({ eliminada: true, id: cuentaId, nombre: u.name });
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : "No se pudo eliminar la cuenta.");
       }
     },
   );

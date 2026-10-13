@@ -3,15 +3,15 @@
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { requireUser } from "@/auth";
+import { db, INTERNAL_USERS } from "@/lib/db";
 import { oneOf, str } from "@/lib/forms";
 import { ROLES } from "@/lib/labels";
 
 async function requireAdmin() {
-  const session = await auth();
-  if (session?.user?.role !== "ADMIN") redirect("/");
-  return session.user;
+  const user = await requireUser();
+  if (user.role !== "ADMIN") redirect("/");
+  return user;
 }
 
 async function emailTaken(email: string, exceptId?: string) {
@@ -45,7 +45,7 @@ export async function updateUser(id: string, fd: FormData) {
   // Un admin no puede quitarse su propio rol: evita quedarse sin administradores.
   const role = me.id === id ? "ADMIN" : oneOf(fd, "role", ROLES, "MEMBER");
   await db.user.update({
-    where: { id },
+    where: { id, ...INTERNAL_USERS },
     data: { name, email, role, ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}) },
   });
   revalidatePath("/usuarios");
@@ -56,7 +56,7 @@ export async function deleteUser(id: string) {
   const me = await requireAdmin();
   if (me.id === id) redirect("/usuarios");
   // Las alianzas, iniciativas, compromisos e interacciones del usuario quedan sin responsable; no se borran.
-  await db.user.delete({ where: { id } });
+  await db.user.delete({ where: { id, ...INTERNAL_USERS } });
   revalidatePath("/usuarios");
   redirect("/usuarios?ok=eliminado");
 }

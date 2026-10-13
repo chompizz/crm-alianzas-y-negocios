@@ -10,7 +10,7 @@ import { ClientsSection } from "./clients-section";
 import { PageHeader } from "@/components/page-header";
 import { DeleteButton, PencilIcon, RowActions } from "@/components/row-actions";
 import { ProgressBar } from "@/components/progress-bar";
-import { db } from "@/lib/db";
+import { db, INTERNAL_USERS } from "@/lib/db";
 import { ownerNames, ownersSelect } from "@/lib/owners";
 import { dateInput, fmtDate, fmtUsd } from "@/lib/format";
 import {
@@ -62,7 +62,7 @@ export default async function AlliancePage({
         orderBy: [{ status: "asc" }, { dueDate: "asc" }],
         include: ownersSelect,
       },
-      opportunities: { orderBy: { createdAt: "desc" } },
+      opportunities: { orderBy: { createdAt: "desc" }, include: { partner: { select: { name: true } } } },
       initiatives: { orderBy: { name: "asc" }, select: { id: true, name: true, progress: true } },
       offerings: { select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } },
       clients: {
@@ -79,7 +79,7 @@ export default async function AlliancePage({
       orderBy: { name: "asc" },
       select: { id: true, name: true, countries: { select: { code: true } } },
     }),
-    db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.user.findMany({ where: INTERNAL_USERS, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.offering.findMany({ select: { id: true, name: true, kind: true }, orderBy: { name: "asc" } }),
     db.organization.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
@@ -213,6 +213,7 @@ export default async function AlliancePage({
                       <Link href={`/oportunidades/${o.id}/editar`} className="hover:underline">{o.title}</Link>
                       <span className="block text-xs text-slate-500">
                         {fmtUsd(o.estimatedValue)}{o.probability != null && ` · ${o.probability}%`} · {OPPORTUNITY_STATUSES[o.status]}
+                        {o.partner && ` · Traída por ${o.partner.name}`}
                       </span>
                     </span>
                     <RowActions
