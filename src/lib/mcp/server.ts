@@ -10,6 +10,7 @@ import { dimensionSummary } from "@/lib/dimension-summary";
 import { importData, importSchema } from "@/lib/mcp/import";
 import { convertInitiative, convertOpportunity, salesFlowSummary } from "@/lib/sales-flow";
 import { db } from "@/lib/db";
+import { notify, notifyNewOwners } from "@/lib/notify";
 import { connectOwners, ownersSelect, setOwners } from "@/lib/owners";
 import { parseDate, startOfTodayUtc } from "@/lib/format";
 import {
@@ -61,7 +62,9 @@ function buildServer(user: User) {
         "(líder, socio, proveedor, cliente, canal, integrador, financiador, institucional u otro). El catálogo guarda productos, servicios y otros, " +
         "que se asignan a organizaciones (lo que ofrecen) y a alianzas (lo que se vende o entrega). Cada alianza puede tener muchos clientes, " +
         "con estado (prospecto, activo, inactivo) y facturación anual. El flujo de ventas va de iniciativa a oportunidad y de oportunidad ganada a cliente " +
-        "(convertir_iniciativa_en_oportunidad, convertir_oportunidad_en_cliente, resumen_flujo_ventas). Usá las herramientas de lectura antes de crear registros " +
+        "(convertir_iniciativa_en_oportunidad, convertir_oportunidad_en_cliente, resumen_flujo_ventas). " +
+        "Alianzas, iniciativas y compromisos pueden tener varios responsables internos (asignar_responsables); cuando alguien cambia algo, " +
+        "los demás responsables reciben un aviso por email (configurar_avisos para activarlo o desactivarlo). Usá las herramientas de lectura antes de crear registros " +
         "para no duplicar, y confirmá con la persona antes de crear o modificar datos. Fechas en formato AAAA-MM-DD. " +
         "Para cargar información que la persona pega o sube (texto, notas de reunión, planillas, PDF), extraé los datos y usá importar_datos: " +
         "primero con simular=true para mostrarle qué se va a crear, y después de su confirmación con simular=false. " +
@@ -464,6 +467,7 @@ function buildServer(user: User) {
           participants: { create: organizaciones.map((organizationId) => ({ organizationId })) },
         },
       });
+      await notifyNewOwners(user, [], owners, `la alianza "${a.name}"`, `/alianzas/${a.id}`);
       return json({ creada: true, id: a.id, nombre: a.name, pais: country.name });
     },
   );
@@ -491,8 +495,9 @@ function buildServer(user: User) {
       },
     },
     async ({ id, etapa, salud, dimension, valorEsperadoUSD, objetivos, responsables, inicio, renovacion }) => {
-      const current = await db.alliance.findUnique({ where: { id }, select: { startDate: true } });
+      const current = await db.alliance.findUnique({ where: { id }, select: { startDate: true, owners: { select: { id: true } } } });
       if (!current) return fail("No existe esa alianza.");
+      const before = current.owners.map((o) => o.id);
       const owners = responsables ? await validUsers(responsables) : undefined;
       if (owners === null) return fail("Algún responsable no existe (ver listar_usuarios).");
       const date = (v: string | null | undefined) => (v === undefined ? undefined : parseDate(v));
@@ -512,6 +517,8 @@ function buildServer(user: User) {
         },
         include: ownersSelect,
       });
+      await notify(user, { userIds: before }, `actualizó la alianza "${a.name}" desde Claude`, `/alianzas/${id}`);
+      if (owners) await notifyNewOwners(user, before, owners, `la alianza "${a.name}"`, `/alianzas/${id}`);
       return json({
         actualizada: true,
         id: a.id,
@@ -549,7 +556,7 @@ function buildServer(user: User) {
       },
     },
     async ({ alianzaId, resumen, fecha, tipo, compromisos = [] }) => {
-      const exists = await db.alliance.findUnique({ where: { id: alianzaId }, select: { id: true } });
+      const exists = await db.alliance.findUnique({ where: { id: alianzaId }, select: { id: true, name: true } });
       if (!exists) return fail("No existe esa alianza.");
       const owners: string[][] = [];
       for (const c of compromisos) {
@@ -576,6 +583,13 @@ function buildServer(user: User) {
         },
         include: { commitments: { select: { id: true, description: true } } },
       });
+      const extra = compromisos.length ? ` con ${compromisos.length} ${compromisos.length === 1 ? "compromiso" : "compromisos"}` : "";
+      await notify(
+        user,
+        { allianceId: alianzaId, userIds: owners.flat() },
+        `registró una interacción en "${exists.name}"${extra}: ${resumen.slice(0, 120)}`,
+        `/alianzas/${alianzaId}`,
+      );
       return json({ registrada: true, id: interaction.id, compromisosCreados: interaction.commitments });
     },
   );
@@ -634,6 +648,12 @@ function buildServer(user: User) {
       const exists = await db.commitment.findUnique({ where: { id }, select: { id: true } });
       if (!exists) return fail("No existe ese compromiso.");
       const c = await db.commitment.update({ where: { id }, data: { status: estado } });
+      await notify(
+        user,
+        { allianceId: c.allianceId, initiativeId: c.initiativeId, commitmentId: c.id },
+        `marcó "${c.description}" como ${COMMITMENT_STATUSES[c.status].toLowerCase()}`,
+        c.allianceId ? `/alianzas/${c.allianceId}` : c.initiativeId ? `/iniciativas/${c.initiativeId}` : "/compromisos",
+      );
       return json({ actualizado: true, id: c.id, estado: COMMITMENT_STATUSES[c.status] });
     },
   );
@@ -653,11 +673,12 @@ function buildServer(user: User) {
       },
     },
     async ({ alianzaId, titulo, descripcion, valorEstimadoUSD, probabilidad, dimension }) => {
-      const exists = await db.alliance.findUnique({ where: { id: alianzaId }, select: { id: true } });
+      const exists = await db.alliance.findUnique({ where: { id: alianzaId }, select: { id: true, name: true } });
       if (!exists) return fail("No existe esa alianza.");
       const o = await db.opportunity.create({
         data: { allianceId: alianzaId, title: titulo, description: descripcion, estimatedValue: valorEstimadoUSD, probability: probabilidad, dimension: dimension ?? "VENTAS" },
       });
+      await notify(user, { allianceId: alianzaId }, `creó la oportunidad "${o.title}" en "${exists.name}"`, "/oportunidades");
       return json({ creada: true, id: o.id, titulo: o.title });
     },
   );
@@ -1080,7 +1101,7 @@ function buildServer(user: User) {
       },
     },
     async ({ alianzaId, organizacionId, nombreNuevo, estado, facturacionAnualUSD, desde, notas }) => {
-      const alliance = await db.alliance.findUnique({ where: { id: alianzaId }, select: { countryCode: true } });
+      const alliance = await db.alliance.findUnique({ where: { id: alianzaId }, select: { countryCode: true, name: true } });
       if (!alliance) return fail("No existe esa alianza.");
       if (!organizacionId === !nombreNuevo) return fail("Indicá organizacionId o nombreNuevo (uno solo).");
       let orgId = organizacionId;
@@ -1110,6 +1131,12 @@ function buildServer(user: User) {
         create: { allianceId: alianzaId, organizationId: orgId!, ...data },
         include: { organization: { select: { name: true } } },
       });
+      await notify(
+        user,
+        { allianceId: alianzaId },
+        `sumó o actualizó a ${c.organization.name} como cliente de "${alliance.name}"`,
+        `/alianzas/${alianzaId}#clientes`,
+      );
       return json({
         ok: true,
         id: c.id,
@@ -1128,8 +1155,19 @@ function buildServer(user: User) {
       inputSchema: { alianzaId: z.string(), organizacionId: z.string() },
     },
     async ({ alianzaId, organizacionId }) => {
-      const r = await db.allianceClient.deleteMany({ where: { allianceId: alianzaId, organizationId: organizacionId } });
-      return r.count ? json({ ok: true }) : fail("Esa organización no es cliente de esa alianza.");
+      const client = await db.allianceClient.findUnique({
+        where: { allianceId_organizationId: { allianceId: alianzaId, organizationId: organizacionId } },
+        include: { organization: { select: { name: true } }, alliance: { select: { name: true } } },
+      });
+      if (!client) return fail("Esa organización no es cliente de esa alianza.");
+      await db.allianceClient.delete({ where: { id: client.id } });
+      await notify(
+        user,
+        { allianceId: alianzaId },
+        `quitó a ${client.organization.name} de los clientes de "${client.alliance.name}"`,
+        `/alianzas/${alianzaId}#clientes`,
+      );
+      return json({ ok: true });
     },
   );
 
@@ -1193,7 +1231,7 @@ function buildServer(user: User) {
           value: valorEstimadoUSD,
           probability: probabilidad,
           dimension,
-        });
+        }, user);
         return json({ creada: true, oportunidadId: o.id, titulo: o.title });
       } catch (e) {
         return fail((e as Error).message);
@@ -1230,7 +1268,7 @@ function buildServer(user: User) {
           status: estado,
           revenue: facturacionAnualUSD,
           since: desde ? parseDate(desde) : null,
-        });
+        }, user);
         return json({
           ok: true,
           clienteId: c.id,
@@ -1264,6 +1302,14 @@ function buildServer(user: User) {
       const owners =
         modo === "reemplazar" ? setOwners(ids) : modo === "quitar" ? { disconnect: ids.map((u) => ({ id: u })) } : connectOwners(ids);
       const args = { where: { id }, data: { owners }, select: { id: true, ...ownersSelect } };
+      const prev = { where: { id }, select: { owners: { select: { id: true } } } };
+      const before =
+        (tipo === "alianza"
+          ? await db.alliance.findUnique(prev)
+          : tipo === "iniciativa"
+            ? await db.initiative.findUnique(prev)
+            : await db.commitment.findUnique(prev)
+        )?.owners.map((o) => o.id) ?? [];
       try {
         const r =
           tipo === "alianza"
@@ -1271,10 +1317,30 @@ function buildServer(user: User) {
             : tipo === "iniciativa"
               ? await db.initiative.update(args)
               : await db.commitment.update(args);
+        const path = tipo === "alianza" ? `/alianzas/${id}` : tipo === "iniciativa" ? `/iniciativas/${id}` : "/compromisos";
+        await notifyNewOwners(user, before, r.owners.map((o) => o.id), `${tipo === "compromiso" ? "un compromiso" : `una ${tipo}`}`, path);
         return json({ actualizado: true, tipo, id: r.id, responsables: r.owners.map((o) => o.name) });
       } catch {
         return fail(`No encontré ${tipo === "compromiso" ? "ese compromiso" : `esa ${tipo}`}.`);
       }
+    },
+  );
+
+  server.registerTool(
+    "configurar_avisos",
+    {
+      title: "Avisos por email",
+      description:
+        "Consulta o cambia si quien usa el conector recibe emails cuando otra persona cambia algo de lo que es responsable " +
+        "(alianzas, iniciativas, compromisos, clientes y oportunidades de sus alianzas).",
+      inputSchema: { activar: z.boolean().optional().describe("true para recibirlos, false para dejar de recibirlos; vacío para consultar") },
+    },
+    async ({ activar }) => {
+      const u =
+        activar === undefined
+          ? await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { emailNotifications: true, email: true } })
+          : await db.user.update({ where: { id: user.id }, data: { emailNotifications: activar }, select: { emailNotifications: true, email: true } });
+      return json({ avisosPorEmail: u.emailNotifications, email: u.email });
     },
   );
 

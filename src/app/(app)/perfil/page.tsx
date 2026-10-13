@@ -2,16 +2,33 @@ import { requireUser } from "@/auth";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
 import { fmtDate } from "@/lib/format";
-import { revokeToken } from "./actions";
+import { revokeToken, setEmailNotifications } from "./actions";
 import { NewTokenForm } from "./new-token-form";
 
 export default async function ProfilePage() {
   const user = await requireUser();
-  const tokens = await db.apiToken.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
+  const [tokens, me] = await Promise.all([
+    db.apiToken.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" } }),
+    db.user.findUnique({ where: { id: user.id }, select: { emailNotifications: true } }),
+  ]);
 
   return (
     <>
       <PageHeader title="Mi perfil" subtitle={`${user.name ?? ""} · ${user.email ?? ""}`} />
+      <section className="card mb-6 max-w-3xl">
+        <h2 className="font-semibold">Avisos por email</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Te avisamos a {user.email} cuando otra persona cambia algo de lo que sos responsable: alianzas, iniciativas, compromisos,
+          clientes y oportunidades de tus alianzas. Los cambios seguidos llegan juntos en un solo email.
+        </p>
+        <form action={setEmailNotifications} className="mt-3 flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="enabled" defaultChecked={me?.emailNotifications ?? true} />
+            Recibir avisos por email
+          </label>
+          <button className="btn-secondary">Guardar</button>
+        </form>
+      </section>
       <section className="card max-w-3xl space-y-4">
         <div>
           <h2 className="font-semibold">Conectar con Claude</h2>

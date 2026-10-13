@@ -1,5 +1,8 @@
 import type { ClientStatus, Dimension } from "@prisma/client";
 import { db } from "@/lib/db";
+import { notify } from "@/lib/notify";
+
+type Actor = { id: string; name?: string | null };
 
 // Flujo de ventas: iniciativa → oportunidad → cliente. La web y el MCP usan estas mismas funciones.
 
@@ -10,12 +13,12 @@ export async function convertInitiative(input: {
   value?: number | string | null;
   probability?: number | null;
   dimension?: Dimension;
-}) {
+}, actor?: Actor) {
   const initiative = await db.initiative.findUnique({ where: { id: input.initiativeId }, select: { id: true, name: true } });
   if (!initiative) throw new Error("No existe esa iniciativa");
-  const alliance = await db.alliance.findUnique({ where: { id: input.allianceId }, select: { id: true } });
+  const alliance = await db.alliance.findUnique({ where: { id: input.allianceId }, select: { id: true, name: true } });
   if (!alliance) throw new Error("No existe esa alianza");
-  return db.opportunity.create({
+  const opp = await db.opportunity.create({
     data: {
       title: input.title?.trim() || initiative.name,
       allianceId: alliance.id,
@@ -25,6 +28,15 @@ export async function convertInitiative(input: {
       dimension: input.dimension ?? "VENTAS",
     },
   });
+  if (actor) {
+    await notify(
+      actor,
+      { allianceId: alliance.id, initiativeId: initiative.id },
+      `convirtió la iniciativa "${initiative.name}" en la oportunidad "${opp.title}" de "${alliance.name}"`,
+      "/flujo-ventas",
+    );
+  }
+  return opp;
 }
 
 // Marca la oportunidad como ganada y crea (o actualiza) el cliente en la alianza de la oportunidad.
@@ -35,10 +47,10 @@ export async function convertOpportunity(input: {
   status?: ClientStatus;
   revenue?: number | string | null;
   since?: Date | null;
-}) {
+}, actor?: Actor) {
   const opp = await db.opportunity.findUnique({
     where: { id: input.opportunityId },
-    select: { id: true, allianceId: true, estimatedValue: true, alliance: { select: { countryCode: true } } },
+    select: { id: true, title: true, allianceId: true, estimatedValue: true, alliance: { select: { countryCode: true, name: true } } },
   });
   if (!opp) throw new Error("No existe esa oportunidad");
 
@@ -56,7 +68,7 @@ export async function convertOpportunity(input: {
     revenue: input.revenue ?? opp.estimatedValue,
     since: input.since ?? new Date(),
   };
-  return db.$transaction(async (tx) => {
+  const client = await db.$transaction(async (tx) => {
     await tx.opportunity.update({ where: { id: opp.id }, data: { status: "GANADA" } });
     // Si la oportunidad ya estaba ligada a otro cliente, se libera para ligarla al nuevo.
     await tx.allianceClient.updateMany({ where: { opportunityId: opp.id }, data: { opportunityId: null } });
@@ -67,6 +79,15 @@ export async function convertOpportunity(input: {
       include: { organization: { select: { name: true } } },
     });
   });
+  if (actor) {
+    await notify(
+      actor,
+      { allianceId: opp.allianceId },
+      `ganó "${opp.title}": ${client.organization.name} es cliente de "${opp.alliance.name}"`,
+      `/alianzas/${opp.allianceId}#clientes`,
+    );
+  }
+  return client;
 }
 
 export type SalesFlowSummary = Awaited<ReturnType<typeof salesFlowSummary>>;

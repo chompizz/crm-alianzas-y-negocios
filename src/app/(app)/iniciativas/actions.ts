@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
 import { all, oneOf, ownerIds, str } from "@/lib/forms";
+import { notify, notifyNewOwners } from "@/lib/notify";
 import { connectOwners, setOwners } from "@/lib/owners";
 import { parseDate } from "@/lib/format";
 import { COMMITMENT_PARTIES, DIMENSIONS } from "@/lib/labels";
@@ -23,7 +24,7 @@ function readInitiative(fd: FormData) {
 }
 
 export async function createInitiative(fd: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const { allianceIds, organizationIds, ownerIds: owners, ...data } = readInitiative(fd);
   const initiative = await db.initiative.create({
     data: {
@@ -33,14 +34,17 @@ export async function createInitiative(fd: FormData) {
       organizations: { connect: organizationIds.map((id) => ({ id })) },
     },
   });
+  await notifyNewOwners(user, [], owners, `la iniciativa "${initiative.name}"`, `/iniciativas/${initiative.id}`);
   revalidatePath("/iniciativas");
   redirect(`/iniciativas/${initiative.id}`);
 }
 
 export async function updateInitiative(id: string, fd: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const { allianceIds, organizationIds, ownerIds: owners, ...data } = readInitiative(fd);
-  await db.initiative.update({
+  const prev = await db.initiative.findUnique({ where: { id }, select: { owners: { select: { id: true } } } });
+  const before = prev?.owners.map((o) => o.id) ?? [];
+  const initiative = await db.initiative.update({
     where: { id },
     data: {
       ...data,
@@ -49,12 +53,16 @@ export async function updateInitiative(id: string, fd: FormData) {
       organizations: { set: organizationIds.map((oid) => ({ id: oid })) },
     },
   });
+  await notify(user, { userIds: before }, `editó la iniciativa "${initiative.name}"`, `/iniciativas/${id}`);
+  await notifyNewOwners(user, before, owners, `la iniciativa "${initiative.name}"`, `/iniciativas/${id}`);
   revalidatePath("/iniciativas");
   redirect(`/iniciativas/${id}`);
 }
 
 export async function deleteInitiative(id: string) {
-  await requireUser();
+  const user = await requireUser();
+  const i = await db.initiative.findUnique({ where: { id }, select: { name: true } });
+  if (i) await notify(user, { initiativeId: id }, `eliminó la iniciativa "${i.name}"`);
   await db.initiative.delete({ where: { id } });
   revalidatePath("/iniciativas");
   redirect("/iniciativas");
@@ -78,9 +86,15 @@ export async function addMilestone(initiativeId: string, fd: FormData) {
 }
 
 export async function toggleMilestone(id: string) {
-  await requireUser();
-  const m = await db.milestone.findUniqueOrThrow({ where: { id } });
+  const user = await requireUser();
+  const m = await db.milestone.findUniqueOrThrow({ where: { id }, include: { initiative: { select: { name: true } } } });
   await db.milestone.update({ where: { id }, data: { done: !m.done } });
+  await notify(
+    user,
+    { initiativeId: m.initiativeId },
+    `${m.done ? "reabrió" : "cumplió"} el hito "${m.title}" de "${m.initiative.name}"`,
+    `/iniciativas/${m.initiativeId}`,
+  );
   await recomputeProgress(m.initiativeId);
   revalidatePath(`/iniciativas/${m.initiativeId}`);
   revalidatePath("/iniciativas");
@@ -95,11 +109,11 @@ export async function deleteMilestone(id: string) {
 }
 
 export async function addInitiativeCommitment(initiativeId: string, fd: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const description = str(fd, "description");
   if (!description) return;
   const party = oneOf(fd, "party", COMMITMENT_PARTIES, "NOSOTROS");
-  await db.commitment.create({
+  const c = await db.commitment.create({
     data: {
       initiativeId,
       description,
@@ -107,7 +121,14 @@ export async function addInitiativeCommitment(initiativeId: string, fd: FormData
       dueDate: parseDate(str(fd, "dueDate")),
       owners: connectOwners(party === "NOSOTROS" ? ownerIds(fd) : []),
     },
+    include: { initiative: { select: { name: true } } },
   });
+  await notify(
+    user,
+    { initiativeId, commitmentId: c.id },
+    `agregó el compromiso "${description}" en "${c.initiative?.name}"`,
+    `/iniciativas/${initiativeId}`,
+  );
   revalidatePath(`/iniciativas/${initiativeId}`);
   revalidatePath("/compromisos");
 }
