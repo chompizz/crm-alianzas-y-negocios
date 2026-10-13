@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 type Tip = { x: number; y: number; code: string; name: string; alliances: string; potential: string; weighted: string };
 
 // Tooltip del mapa: lee los datos de los elementos con data-code (países y etiquetas)
-// y al hacer clic lleva a las alianzas de ese país.
+// y al hacer clic lleva a las oportunidades de ese país.
 export function MapHover({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -38,7 +38,7 @@ export function MapHover({ children }: { children: React.ReactNode }) {
       onMouseLeave={() => setTip(null)}
       onClick={(e) => {
         const el = target(e);
-        if (el) router.push(`/alianzas?pais=${el.dataset.code}`);
+        if (el) router.push(`/oportunidades?pais=${el.dataset.code}`);
       }}
     >
       {children}
@@ -56,10 +56,10 @@ export function MapHover({ children }: { children: React.ReactNode }) {
             <span className="font-mono text-[10px] text-slate-400">{tip.code}</span>
           </p>
           <p className="mt-1 font-mono text-lg font-semibold text-indigo-700">{tip.potential}</p>
-          <p className="text-slate-500">facturación potencial</p>
+          <p className="text-slate-500">facturación potencial (oportunidades abiertas)</p>
           <div className="mt-1.5 flex justify-between border-t border-slate-200 pt-1.5 text-slate-600">
             <span>{tip.alliances}</span>
-            <span>Oport. pond. {tip.weighted}</span>
+            <span>Pond. {tip.weighted}</span>
           </div>
         </div>
       )}

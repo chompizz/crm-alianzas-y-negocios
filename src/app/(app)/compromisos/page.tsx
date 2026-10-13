@@ -54,10 +54,10 @@ export default async function CommitmentsPage({
       </form>
       <div className="card overflow-x-auto p-0">
         <table className="table">
-          <thead><tr><th>Compromiso</th><th>Alianza / iniciativa</th><th>Quién</th><th>Fecha</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Compromiso</th><th>Alianza / iniciativa</th><th>Quién</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
           <tbody>
-            {commitments.map((c) => <CommitmentRow key={c.id} commitment={c} showAlliance />)}
-            {commitments.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-slate-500">No hay compromisos con estos filtros.</td></tr>}
+            {commitments.map((c) => <CommitmentRow key={c.id} commitment={c} showAlliance back={"/compromisos"} />)}
+            {commitments.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-slate-500">No hay compromisos con estos filtros.</td></tr>}
           </tbody>
         </table>
       </div>

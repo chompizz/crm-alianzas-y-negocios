@@ -5,8 +5,9 @@ import { useOptimistic, useState, useTransition } from "react";
 import type { AllianceStage, Dimension, Health } from "@prisma/client";
 import { DimensionBadge } from "@/components/dimension-badge";
 import { OwnersPicker } from "@/components/owners-picker";
+import { RowActions } from "@/components/row-actions";
 import { ALLIANCE_STAGES, HEALTH, HEALTH_DOT } from "@/lib/labels";
-import { quickUpdateAlliance, setAllianceStage } from "./actions";
+import { deleteAlliance, quickUpdateAlliance, setAllianceStage } from "./actions";
 
 export type KanbanCard = {
   id: string;
@@ -98,8 +99,8 @@ export function KanbanBoard({ cards, users }: { cards: KanbanCard[]; users: User
               </h2>
               <div className="mt-1 space-y-2">
                 {items.map((a) => (
+                  <div key={a.id} className="relative">
                   <Link
-                    key={a.id}
                     href={`/alianzas/${a.id}`}
                     draggable
                     onDragStart={(e) => {
@@ -111,7 +112,7 @@ export function KanbanBoard({ cards, users }: { cards: KanbanCard[]; users: User
                       setDragging(null);
                       setOver(null);
                     }}
-                    className={`block cursor-grab rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-indigo-300 active:cursor-grabbing ${
+                    className={`block cursor-grab rounded-lg border border-slate-200 bg-white p-3 pb-9 shadow-sm transition hover:border-indigo-300 active:cursor-grabbing ${
                       dragging === a.id ? "opacity-40" : ""
                     }`}
                   >
@@ -133,6 +134,14 @@ export function KanbanBoard({ cards, users }: { cards: KanbanCard[]; users: User
                       <p className="mt-1 text-xs text-amber-700">{a.pendingCommitments} compromiso(s) pendiente(s)</p>
                     )}
                   </Link>
+                  <RowActions
+                    className="absolute bottom-1.5 right-1.5"
+                    editHref={`/alianzas/${a.id}/editar`}
+                    deleteAction={deleteAlliance.bind(null, a.id)}
+                    confirm={`¿Eliminar la alianza "${a.name}"? Se borran también sus participantes, clientes, oportunidades y compromisos.`}
+                    label={a.name}
+                  />
+                  </div>
                 ))}
               </div>
             </section>

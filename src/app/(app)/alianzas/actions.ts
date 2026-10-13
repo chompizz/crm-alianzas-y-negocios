@@ -102,6 +102,7 @@ export async function removeParticipant(allianceId: string, organizationId: stri
   await requireUser();
   await db.allianceParticipant.delete({ where: { allianceId_organizationId: { allianceId, organizationId } } });
   revalidatePath(`/alianzas/${allianceId}`);
+  revalidatePath(`/organizaciones/${organizationId}`);
 }
 
 // Registra una interacción y, opcionalmente, los compromisos que salieron de ella
@@ -276,7 +277,9 @@ export async function removeClient(allianceId: string, clientId: string) {
   });
   await notify(user, { allianceId }, `quitó a ${client.organization.name} de los clientes de "${client.alliance.name}"`, `/alianzas/${allianceId}#clientes`);
   revalidatePath(`/alianzas/${allianceId}`);
+  revalidatePath(`/organizaciones/${client.organizationId}`);
   revalidatePath("/clientes");
+  revalidatePath("/flujo-ventas");
 }
 
 function readClient(fd: FormData) {

@@ -56,7 +56,7 @@ const shapes = land.map((f: Feature<Geometry>) => ({ id: String(f.id), d: path(f
 const hoverData = (r: CountryRevenue) => ({
   "data-code": r.code,
   "data-name": r.name,
-  "data-alliances": `${r.alliances} ${r.alliances === 1 ? "alianza abierta" : "alianzas abiertas"}`,
+  "data-alliances": `${r.opportunities} ${r.opportunities === 1 ? "oportunidad" : "oportunidades"} · ${r.alliances} ${r.alliances === 1 ? "alianza" : "alianzas"}`,
   "data-potential": fmtUsdCompact(r.potential),
   "data-weighted": fmtUsdCompact(r.weightedOpportunities),
 });
@@ -72,17 +72,19 @@ export function AllianceMap({ data }: { data: CountryRevenue[] }) {
     <section className="card relative mb-6 overflow-hidden p-0">
       <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-5">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-indigo-700/80">Mapa de alianzas</p>
-          <h2 className="text-lg font-semibold">Facturación potencial por país</h2>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-indigo-700/80">Facturación potencial</p>
+          <h2 className="text-lg font-semibold">Oportunidades por país</h2>
         </div>
         <div className="text-right">
           <p className="font-mono text-2xl font-semibold text-indigo-700">{fmtUsdCompact(total)}</p>
-          <p className="text-xs text-slate-500">{data.reduce((s, r) => s + r.alliances, 0)} alianzas abiertas en {data.length} países</p>
+          <p className="text-xs text-slate-500">
+            {data.reduce((s, r) => s + r.opportunities, 0)} oportunidades abiertas en {data.length} {data.length === 1 ? "país" : "países"}
+          </p>
         </div>
       </div>
       <div className="grid lg:grid-cols-[1fr_17rem]">
         <MapHover>
-        <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Mapa de alianzas por país">
+        <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Mapa de oportunidades por país">
           <defs>
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="3" result="b" />
@@ -111,15 +113,17 @@ export function AllianceMap({ data }: { data: CountryRevenue[] }) {
         <ol className="max-h-[470px] overflow-y-auto border-t border-slate-200 px-5 py-3 text-sm lg:border-l lg:border-t-0">
           {data.map((r, i) => (
             <li key={r.code} className="flex items-center justify-between gap-2 border-b border-slate-100 py-2 last:border-0">
-              <Link href={`/alianzas?pais=${r.code}`} className="min-w-0 hover:text-indigo-700">
+              <Link href={`/oportunidades?pais=${r.code}`} className="min-w-0 hover:text-indigo-700">
                 <span className="mr-2 font-mono text-xs text-slate-400">{String(i + 1).padStart(2, "0")}</span>
                 <span className="font-medium">{r.name}</span>
-                <span className="block pl-7 text-xs text-slate-500">{r.alliances} {r.alliances === 1 ? "alianza" : "alianzas"}</span>
+                <span className="block pl-7 text-xs text-slate-500">
+                  {r.opportunities} {r.opportunities === 1 ? "oportunidad" : "oportunidades"} · pond. {fmtUsdCompact(r.weightedOpportunities)}
+                </span>
               </Link>
               <span className="font-mono font-semibold text-indigo-700">{fmtUsdCompact(r.potential)}</span>
             </li>
           ))}
-          {data.length === 0 && <li className="py-6 text-center text-slate-500">Cuando cargues alianzas, los países se iluminan acá.</li>}
+          {data.length === 0 && <li className="py-6 text-center text-slate-500">Cuando cargues oportunidades abiertas, los países se iluminan acá.</li>}
         </ol>
       </div>
     </section>

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
-import { oneOf, str } from "@/lib/forms";
+import { backPath, oneOf, str } from "@/lib/forms";
 import { RELATIONSHIP_LEVELS } from "@/lib/labels";
 
 function readContact(fd: FormData) {
@@ -39,9 +39,10 @@ export async function updateContact(id: string, fd: FormData) {
   redirect(`/organizaciones/${data.organizationId}`);
 }
 
-export async function deleteContact(id: string) {
+export async function deleteContact(id: string, back?: string) {
   await requireUser();
   const contact = await db.contact.delete({ where: { id } });
   revalidatePath("/contactos");
-  redirect(`/organizaciones/${contact.organizationId}`);
+  revalidatePath(`/organizaciones/${contact.organizationId}`);
+  redirect(backPath(back, `/organizaciones/${contact.organizationId}`));
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { DeleteButton } from "@/components/row-actions";
 import { db } from "@/lib/db";
 import { OFFERING_KINDS } from "@/lib/labels";
 import { deleteOffering, updateOffering } from "../actions";
@@ -22,9 +23,7 @@ export default async function OfferingPage({ params }: { params: Promise<{ id: s
         title={offering.name}
         subtitle={OFFERING_KINDS[offering.kind]}
         actions={
-          <form action={deleteOffering.bind(null, id)}>
-            <button className="btn-danger">Eliminar</button>
-          </form>
+          <DeleteButton action={deleteOffering.bind(null, id)} confirm={`¿Eliminar "${offering.name}" del catálogo?`} label="ítem" variant="button" />
         }
       />
       <form action={updateOffering.bind(null, id)} className="card max-w-3xl space-y-4">

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { db } from "@/lib/db";
-import { all, oneOf, ownerIds, str } from "@/lib/forms";
+import { all, backPath, oneOf, ownerIds, str } from "@/lib/forms";
 import { notify, notifyNewOwners } from "@/lib/notify";
 import { connectOwners, setOwners } from "@/lib/owners";
 import { parseDate } from "@/lib/format";
@@ -59,13 +59,13 @@ export async function updateInitiative(id: string, fd: FormData) {
   redirect(`/iniciativas/${id}`);
 }
 
-export async function deleteInitiative(id: string) {
+export async function deleteInitiative(id: string, back?: string) {
   const user = await requireUser();
   const i = await db.initiative.findUnique({ where: { id }, select: { name: true } });
   if (i) await notify(user, { initiativeId: id }, `eliminó la iniciativa "${i.name}"`);
   await db.initiative.delete({ where: { id } });
   revalidatePath("/iniciativas");
-  redirect("/iniciativas");
+  redirect(backPath(back, "/iniciativas"));
 }
 
 // El avance de una iniciativa es el porcentaje de hitos cumplidos.
@@ -98,6 +98,15 @@ export async function toggleMilestone(id: string) {
   await recomputeProgress(m.initiativeId);
   revalidatePath(`/iniciativas/${m.initiativeId}`);
   revalidatePath("/iniciativas");
+}
+
+export async function updateMilestone(id: string, fd: FormData) {
+  await requireUser();
+  const title = str(fd, "title");
+  if (!title) return;
+  const m = await db.milestone.update({ where: { id }, data: { title, dueDate: parseDate(str(fd, "dueDate")) } });
+  revalidatePath(`/iniciativas/${m.initiativeId}`);
+  redirect(`/iniciativas/${m.initiativeId}#hitos`);
 }
 
 export async function deleteMilestone(id: string) {

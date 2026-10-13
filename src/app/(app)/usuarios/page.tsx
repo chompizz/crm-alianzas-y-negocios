@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { PageHeader } from "@/components/page-header";
 import { db } from "@/lib/db";
 import { ROLES } from "@/lib/labels";
 import { createUser, deleteUser } from "./actions";
-import { ConfirmButton } from "./confirm-button";
+import { RowActions } from "@/components/row-actions";
 
 const MESSAGES: Record<string, string> = {
   creado: "Usuario creado.",
@@ -39,13 +38,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                   <td className="font-medium">{u.name}{u.id === me.id && <span className="ml-1 text-xs text-slate-500">(vos)</span>}</td>
                   <td>{u.email}</td>
                   <td>{ROLES[u.role]}</td>
-                  <td className="whitespace-nowrap text-right">
-                    <Link href={`/usuarios/${u.id}/editar`} className="text-xs text-indigo-600 hover:underline">Editar</Link>
-                    {u.id !== me.id && (
-                      <form action={deleteUser.bind(null, u.id)} className="ml-3 inline">
-                        <ConfirmButton message={`¿Eliminar a ${u.name}? Sus alianzas y compromisos quedarán sin responsable.`} />
-                      </form>
-                    )}
+                  <td>
+                    <RowActions
+                      editHref={`/usuarios/${u.id}/editar`}
+                      deleteAction={u.id !== me.id ? deleteUser.bind(null, u.id) : undefined}
+                      confirm={`¿Eliminar a ${u.name}? Sus alianzas y compromisos quedarán sin responsable.`}
+                      label={u.name}
+                    />
                   </td>
                 </tr>
               ))}

@@ -24,3 +24,8 @@ export function oneOf<T extends string>(fd: FormData, key: string, options: Reco
 export function ownerIds(fd: FormData, key = "ownerIds"): string[] {
   return [...new Set(all(fd, key))];
 }
+
+// Ruta interna a la que volver después de guardar o eliminar (evita redirecciones a otros sitios).
+export function backPath(v: unknown, fallback: string): string {
+  return typeof v === "string" && v.startsWith("/") && !v.startsWith("//") ? v : fallback;
+}

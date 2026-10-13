@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { OrganizationType, Prisma } from "@prisma/client";
 import { PageHeader } from "@/components/page-header";
+import { RowActions } from "@/components/row-actions";
+import { deleteOrganization } from "./actions";
 import { db } from "@/lib/db";
 import { ORGANIZATION_TYPES } from "@/lib/labels";
 
@@ -46,7 +48,7 @@ export default async function OrganizationsPage({
       <div className="card overflow-x-auto p-0">
         <table className="table">
           <thead>
-            <tr><th>Nombre</th><th>Tipo</th><th>Países</th><th>Sector</th><th>Contactos</th></tr>
+            <tr><th>Nombre</th><th>Tipo</th><th>Países</th><th>Sector</th><th>Contactos</th><th></th></tr>
           </thead>
           <tbody>
             {organizations.map((o) => (
@@ -60,10 +62,18 @@ export default async function OrganizationsPage({
                 </td>
                 <td>{o.sector}</td>
                 <td>{o._count.contacts}</td>
+                <td>
+                  <RowActions
+                    editHref={`/organizaciones/${o.id}/editar`}
+                    deleteAction={deleteOrganization.bind(null, o.id)}
+                    confirm={`¿Eliminar "${o.name}"? Se borran también sus contactos y su participación en alianzas.`}
+                    label={o.name}
+                  />
+                </td>
               </tr>
             ))}
             {organizations.length === 0 && (
-              <tr><td colSpan={5} className="py-8 text-center text-slate-500">No hay organizaciones con estos filtros.</td></tr>
+              <tr><td colSpan={6} className="py-8 text-center text-slate-500">No hay organizaciones con estos filtros.</td></tr>
             )}
           </tbody>
         </table>
